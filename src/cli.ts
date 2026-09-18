@@ -52,7 +52,7 @@ const { values: opt, positionals } = parseArgs({
         'no-sync': { type: 'boolean' },
         offline: { type: 'boolean' },
         quiet: { type: 'boolean' },
-        open: { type: 'boolean' },
+        location: { type: 'boolean' },
         refresh: { type: 'boolean' },
         'sync-dir': { type: 'string' },
         yes: { type: 'boolean', short: 'y' },
@@ -119,7 +119,8 @@ function openFile(file: string) {
         process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', file]]
         : process.platform === 'darwin' ? ['open', [file]]
         : ['xdg-open', [file]];
-    spawn(cmd, args as string[], { detached: true, stdio: 'ignore' }).unref();
+    // No browser opener (a server, SSH): the path printed alongside is enough, so ignore the failure.
+    spawn(cmd, args as string[], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
 }
 
 const pricesCache = () => path.join(configDir(), 'pricing-cache.json');
@@ -313,7 +314,7 @@ async function main() {
     if (cmd === 'report') {
         const file = dashboard(await data(false));
         out(fill(L().dashboard, { file }));
-        if (opt.open) openFile(file);
+        if (!opt.location) openFile(file);
         return;
     }
     if (cmd === 'pricing') {

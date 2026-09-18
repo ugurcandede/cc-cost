@@ -23,8 +23,8 @@ cc-cost insights                 # overview, cache, context size, attribution, m
 cc-cost plan                     # per month: API equivalent, per-30-day rate, × Pro / Max 5x / Max 20x, limit hits
 cc-cost blocks                   # 5-hour windows, the active one with time left
 
-cc-cost report                   # write the dashboard
-cc-cost report --open            # write it and open it in the browser
+cc-cost report                   # write the dashboard and open it in the browser
+cc-cost report --location        # write it and print its path, without opening it
 cc-cost pricing                  # prices in use and their source
 cc-cost pricing --refresh        # fetch the pricing page now
 

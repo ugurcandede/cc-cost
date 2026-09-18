@@ -32,7 +32,7 @@ npm i -g @ugurcandede/cc-cost          # or, with Yarn 1: yarn global add @ugurc
 cc-cost setup
 
 cc-cost                  # sync this machine, print a summary
-cc-cost report --open    # the dashboard
+cc-cost report           # open the dashboard
 ```
 
 Run `setup` on every machine and point them at the same folder. Each one adds its numbers; every one

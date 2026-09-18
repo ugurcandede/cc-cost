@@ -15,7 +15,7 @@ Commands:
   blocks                        Usage in 5-hour windows
   insights                      Where the money goes and what drives it
   plan                          API equivalent vs subscription prices, rate-limit hits
-  report                        Write the HTML dashboard (--open to open it)
+  report                        Open the HTML dashboard (--location prints its path instead)
   pricing                       Prices in use (--refresh to fetch them again)
   setup                         Pick the shared folder, schedule daily runs, add the Claude Code hook
   status                        Settings, machines, last sync, scheduler and hook
@@ -220,7 +220,7 @@ Komutlar:
   blocks                        5 saatlik pencerelerde kullanım
   insights                      Para nereye gidiyor, neyden kaynaklanıyor
   plan                          API karşılığı ve abonelik fiyatları, limit aşımları
-  report                        HTML dashboard'u yaz (--open ile aç)
+  report                        HTML dashboard'u aç (--location sadece yolunu basar)
   pricing                       Kullanılan fiyatlar (--refresh ile yeniden çek)
   setup                         Paylaşılan klasörü seç, günlük çalışmayı zamanla, Claude Code hook'unu ekle
   status                        Ayarlar, makineler, son senkron, zamanlayıcı ve hook
