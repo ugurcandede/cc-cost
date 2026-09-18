@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { tempDir } from './tmp.ts';
 import { dataFolderIn, hookCommand, hookInstalled, installHook, isEphemeral, plistFor, removeHook, systemdUnits, windowsTaskScript } from '../src/setup.ts';
 
 const runner = { node: 'C:\\Program Files\\nodejs\\node.exe', script: "C:\\Users\\o'brien\\cc-cost\\dist\\cli.js" };
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cc-cost-setup-'));
+const tmp = () => tempDir('cc-cost-setup-');
 
 test('hook: added next to existing hooks, idempotent, removed cleanly', () => {
     const file = path.join(tmp(), 'settings.json');

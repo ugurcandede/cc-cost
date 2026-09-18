@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { tempDir } from './tmp.ts';
 import { projectRoot, scan } from '../src/scan.ts';
 import { T } from '../src/types.ts';
 
 // A fake ~/.claude with one project directory and the given transcript files
 function claudeDir(files: Record<string, object[]>): string {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-cost-'));
+    const root = tempDir('cc-cost-');
     const proj = path.join(root, 'projects', 'Q--Projects-app');
     fs.mkdirSync(path.join(proj, 'sess-1', 'subagents'), { recursive: true });
     for (const [name, lines] of Object.entries(files))
@@ -110,7 +110,7 @@ test('anonymized projects are hashed', async () => {
 });
 
 test('projects resolve to their git repository', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-cost-repos-'));
+    const root = tempDir('cc-cost-repos-');
     const repo = path.join(root, 'api');
     fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
     fs.mkdirSync(path.join(repo, 'core', 'src'), { recursive: true });

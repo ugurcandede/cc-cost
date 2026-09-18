@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { tempDir } from './tmp.ts';
 import { priceRows } from '../src/aggregate.ts';
 import { BUNDLED, loadPrices, modelId, parsePricingPage, priceFor } from '../src/pricing.ts';
 import { emptySnapshot } from '../src/snapshot.ts';
@@ -85,14 +85,14 @@ test('unknown models are reported, not priced as zero', () => {
 });
 
 test('loadPrices: offline without a cache falls back to the bundled table and says why', async () => {
-    const cache = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-cost-price-')), 'cache.json');
+    const cache = path.join(tempDir('cc-cost-price-'), 'cache.json');
     const r = await loadPrices(cache, { offline: true });
     assert.equal(r.table.source, 'bundled');
     assert.equal(r.note, 'offline');
 });
 
 test('loadPrices: a fresh cache is used as is, bundled models fill its gaps', async () => {
-    const cache = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-cost-price-')), 'cache.json');
+    const cache = path.join(tempDir('cc-cost-price-'), 'cache.json');
     const live = { date: new Date().toISOString(), source: 'live', models: { 'claude-opus-5': [9, 9, 9, 9, 9] }, fast: {}, webSearch: 0.02 };
     fs.writeFileSync(cache, JSON.stringify(live));
     const r = await loadPrices(cache);

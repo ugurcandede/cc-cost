@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { tempDir } from './tmp.ts';
 import type { ScanResult } from '../src/scan.ts';
 import { emptySnapshot, fromLegacy, loadAll, merge, save } from '../src/snapshot.ts';
 import { T_LEN, type Row } from '../src/types.ts';
@@ -48,7 +48,7 @@ test('legacy snapshots convert, fast rows included', () => {
 });
 
 test('loadAll: a machine on schema 2 hides its legacy file', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-cost-sync-'));
+    const dir = tempDir('cc-cost-sync-');
     fs.writeFileSync(path.join(dir, 'pc.json'), JSON.stringify({ host: 'pc', days: { '2026-08-10': { 'claude-opus-5': [0, 0, 0, 0, 0, 1] } } }));
     fs.writeFileSync(path.join(dir, 'mac.json'), JSON.stringify({ host: 'mac', days: { '2026-08-10': { 'claude-opus-5': [0, 0, 0, 0, 0, 1] } } }));
     save(dir, { ...emptySnapshot('pc', 'UTC'), rows: [row('2026-09-10', 2)] });
