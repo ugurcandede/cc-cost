@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -22,6 +22,7 @@ import {
     removeSchedule, SCHEDULE_TIME, scheduleInstalled, syncFolders,
 } from './setup.ts';
 import { loadAll } from './snapshot.ts';
+import { installMethod, isNewer, latestVersion, updateCommand } from './update.ts';
 import { dashboardPath, sync, type Settings } from './sync.ts';
 
 // Name, version and project page come from package.json only
@@ -124,6 +125,7 @@ function openFile(file: string) {
 }
 
 const pricesCache = () => path.join(configDir(), 'pricing-cache.json');
+const updateCache = () => path.join(configDir(), 'update-check.json');
 
 async function data(verbose: boolean) {
     if (!opt['no-sync']) {
@@ -158,9 +160,34 @@ function dashboard(d: Data) {
     }, dashboardPath(settings));
 }
 
-function footer(d: Data) {
+async function footer(d: Data) {
     if (d.prices.note) out(fill(L().pricesFallback, { reason: d.prices.note, source: d.prices.table.source, date: d.prices.table.date.slice(0, 10) }));
     if (d.unknown.size) out(fill(L().unknownModels, { list: [...d.unknown].join(', ') }));
+    // At most one registry check a day, and never in machine-readable or offline output
+    if (opt.json || opt.csv || opt.offline || opt.quiet) return;
+    const latest = await latestVersion(pkg.name, updateCache());
+    if (latest && isNewer(latest, pkg.version)) out('\n' + paint('yellow', fill(L().update.available, { latest, current: pkg.version })));
+}
+
+async function update() {
+    const U = L().update;
+    const script = currentRunner().script;
+    const method = installMethod(script);
+    if (method === 'ephemeral') return out(fill(U.ephemeral, { pkg: pkg.name }));
+    if (method === 'unknown') return out(fill(U.manual, { path: script }));
+    let latest: string | undefined;
+    try {
+        latest = await latestVersion(pkg.name, updateCache(), { force: true });
+    } catch {
+        fail(U.checkFailed);
+    }
+    if (!latest || !isNewer(latest, pkg.version)) return out(fill(U.upToDate, { current: pkg.version }));
+    const command = updateCommand[method](pkg.name).join(' ');
+    out(fill(U.running, { latest, command }));
+    // a fixed command line, no user input; the shell finds npm.cmd / yarn.cmd on Windows
+    const res = spawnSync(command, { stdio: 'inherit', shell: true });
+    if (res.status !== 0) fail(fill(U.failed, { code: String(res.status), command }));
+    out(fill(U.done, { latest }));
 }
 
 // Print a table report as a table, CSV or JSON
@@ -307,7 +334,7 @@ async function main() {
             const r = insights({ rows, hours, limits, table: d.prices.table, timezone: settings.timezone });
             out(opt.json ? JSON.stringify(r.json, null, 2) : rows.length ? r.text : L().noData);
         }
-        if (!opt.json && !opt.csv) footer(d);
+        if (!opt.json && !opt.csv) await footer(d);
         return;
     }
 
@@ -330,6 +357,7 @@ async function main() {
     }
     if (cmd === 'setup') return setup();
     if (cmd === 'status') return status();
+    if (cmd === 'update') return update();
     if (cmd === 'config') {
         if (rest[0] === 'set') {
             const [key, value = ''] = rest.slice(1);

@@ -3,7 +3,7 @@
   <h1>cc-cost</h1>
   <p>What your Claude Code usage would cost at API list prices, totalled across all your machines (Windows, Mac, Linux), with an archive that outlives Claude Code's transcript cleanup and a dashboard you open with a double-click.</p>
   <br>
-  <a href="https://github.com/ugurcandede/cc-cost" target="_blank"><img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="Version 0.1.0"></a>
+  <a href="https://github.com/ugurcandede/cc-cost" target="_blank"><img src="https://img.shields.io/badge/version-0.1.1-blue?style=flat-square" alt="Version 0.1.1"></a>
   <img src="https://img.shields.io/badge/Node.js-22%2B%20·%20zero%20dependencies-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 22+, zero dependencies">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
   <br>  
@@ -59,6 +59,7 @@ cc-cost insights             # context size, cache efficiency, what drives the c
 cc-cost plan                 # API equivalent vs Pro / Max 5x / Max 20x, rate-limit hits
 cc-cost blocks               # usage in Claude's 5-hour windows
 cc-cost status               # settings, machines, schedule, hook
+cc-cost update               # update to the latest version
 ```
 
 ```

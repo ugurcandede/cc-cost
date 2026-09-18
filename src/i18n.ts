@@ -19,6 +19,7 @@ Commands:
   pricing                       Prices in use (--refresh to fetch them again)
   setup                         Pick the shared folder, schedule daily runs, add the Claude Code hook
   status                        Settings, machines, last sync, scheduler and hook
+  update                        Update cc-cost to the latest version
   config                        Show settings; "config set <key> <value>" changes one
 
 Filters:
@@ -127,6 +128,16 @@ Docs and issues: {url}`,
     blocks: {
         active: 'active, {left} left',
     },
+    update: {
+        available: 'cc-cost {latest} is available (you have {current}). Run: cc-cost update',
+        upToDate: 'cc-cost {current} is up to date.',
+        running: 'Updating to {latest}: {command}',
+        done: 'Updated to cc-cost {latest}. The schedule and hook keep working; no need to run setup again.',
+        failed: 'The update failed (exit code {code}). Run it yourself: {command}',
+        checkFailed: 'Could not reach the npm registry to check for a newer version.',
+        ephemeral: 'cc-cost is running through npx or dlx, which fetch it each time. For the newest version: npx {pkg}@latest',
+        manual: 'cc-cost runs from {path}, not from a package-manager install. Update it the way you installed it (a git checkout: git pull, then yarn build).',
+    },
     setup: {
         title: 'cc-cost {version} setup',
         found: 'Shared folders found: {list}',
@@ -224,6 +235,7 @@ Komutlar:
   pricing                       Kullanılan fiyatlar (--refresh ile yeniden çek)
   setup                         Paylaşılan klasörü seç, günlük çalışmayı zamanla, Claude Code hook'unu ekle
   status                        Ayarlar, makineler, son senkron, zamanlayıcı ve hook
+  update                        cc-cost'u en son sürüme güncelle
   config                        Ayarları göster; "config set <anahtar> <değer>" ile değiştir
 
 Filtreler:
@@ -331,6 +343,16 @@ Dokümantasyon ve hata bildirimi: {url}`,
     },
     blocks: {
         active: 'aktif, {left} kaldı',
+    },
+    update: {
+        available: 'cc-cost {latest} yayında (sizdeki {current}). Güncellemek için: cc-cost update',
+        upToDate: 'cc-cost {current} güncel.',
+        running: '{latest} sürümüne güncelleniyor: {command}',
+        done: 'cc-cost {latest} sürümüne güncellendi. Zamanlama ve hook çalışmaya devam eder; setup\'ı yeniden çalıştırmaya gerek yok.',
+        failed: 'Güncelleme başarısız oldu (çıkış kodu {code}). Kendiniz çalıştırın: {command}',
+        checkFailed: 'Yeni sürümü kontrol etmek için npm registry\'ye ulaşılamadı.',
+        ephemeral: 'cc-cost npx ya da dlx ile çalışıyor; bunlar her seferinde paketi indirir. En yeni sürüm için: npx {pkg}@latest',
+        manual: 'cc-cost {path} konumundan çalışıyor, bir paket yöneticisi kurulumu değil. Nasıl kurduysanız öyle güncelleyin (git kopyası: git pull, ardından yarn build).',
     },
     setup: {
         title: 'cc-cost {version} kurulumu',

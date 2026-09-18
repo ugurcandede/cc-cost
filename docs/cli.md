@@ -36,6 +36,7 @@ cc-cost setup --no-hook          # don't add the SessionEnd hook
 cc-cost setup --remove           # remove the schedule and the hook
 
 cc-cost status                   # settings, machines and their last update, schedule, hook, prices
+cc-cost update                   # update to the latest version with the package manager that installed it
 cc-cost config                   # current settings
 cc-cost config set <key> <value> # change one; see configuration.md
 ```

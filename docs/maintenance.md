@@ -35,6 +35,23 @@ removes the schedule and the hook, and nothing else.
 Under `npx` those point into a cache that gets cleaned, so `setup` refuses to install them there. With a
 Node version manager (nvm, fnm, volta), run `setup` again after switching versions.
 
+## Updating
+
+```bash
+cc-cost update
+```
+
+updates with the package manager cc-cost was installed with (`npm i -g`, `yarn global add` or
+`pnpm add -g`, each with `@latest`). The schedule and hook point at the installed package's folder, so
+they pick up the new version without running `setup` again; only switching Node versions with a version
+manager needs a new `setup`.
+
+Reports also check the registry at most once a day and print one line when a newer version is out.
+The check is skipped with `--json`, `--csv`, `--quiet` and `--offline`, so scheduled runs and scripts
+never see it.
+
+Version 0.1.0 predates `cc-cost update`; update it once with `npm i -g @ugurcandede/cc-cost@latest`.
+
 ## Checking on it
 
 ```bash
