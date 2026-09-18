@@ -17,8 +17,9 @@ export interface Runner {
     script: string;
 }
 export const currentRunner = (): Runner => ({ node: process.execPath, script: fs.realpathSync(process.argv[1]!) });
-// npx runs from a cache folder that gets cleaned; a scheduled path there would break silently.
-export const isEphemeral = (r: Runner) => /[\\/]_npx[\\/]/.test(r.script);
+// npx, yarn dlx and pnpm dlx run from temporary or cache folders that get cleaned; a scheduled path
+// there would break silently.
+export const isEphemeral = (r: Runner) => /[\\/](_npx|dlx(-\d+)?)[\\/]/.test(r.script);
 
 // ---------- shared folder
 

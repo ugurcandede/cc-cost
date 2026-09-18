@@ -14,9 +14,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"cc-cost@workspace:.":
+"@ugurcandede/cc-cost@workspace:.":
   version: 0.0.0-use.local
-  resolution: "cc-cost@workspace:."
+  resolution: "@ugurcandede/cc-cost@workspace:."
   dependencies:
     "@types/node": "npm:^22.20.3"
     typescript: "npm:^6.0.3"

@@ -25,7 +25,7 @@
 ## Quick start
 
 ```bash
-npm i -g cc-cost
+npm i -g @ugurcandede/cc-cost          # or, with Yarn 1: yarn global add @ugurcandede/cc-cost
 
 # Pick the folder your machines share (Dropbox, iCloud Drive, OneDrive, …),
 # your language and plan; schedule a daily sync and add the Claude Code hook.
@@ -37,6 +37,10 @@ cc-cost report --open    # the dashboard
 
 Run `setup` on every machine and point them at the same folder. Each one adds its numbers; every one
 sees the total.
+
+Yarn 2 and later have no global installs: install with npm, or try a report once with
+`yarn dlx @ugurcandede/cc-cost` (or `npx @ugurcandede/cc-cost`). `setup` needs a permanent install,
+since the schedule and hook point at it.
 
 ## Prerequisites
 

@@ -1,5 +1,5 @@
 {
-  "name": "cc-cost",
+  "name": "@ugurcandede/cc-cost",
   "version": "0.1.0",
   "description": "API-equivalent cost of your Claude Code usage across all your machines, with an archive that outlives transcript cleanup and an offline dashboard.",
   "keywords": [
@@ -44,6 +44,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
     "dev": "node src/cli.ts",

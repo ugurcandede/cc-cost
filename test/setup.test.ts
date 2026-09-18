@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { dataFolderIn, hookCommand, hookInstalled, installHook, plistFor, removeHook, systemdUnits, windowsTaskScript } from '../src/setup.ts';
+import { dataFolderIn, hookCommand, hookInstalled, installHook, isEphemeral, plistFor, removeHook, systemdUnits, windowsTaskScript } from '../src/setup.ts';
 
 const runner = { node: 'C:\\Program Files\\nodejs\\node.exe', script: "C:\\Users\\o'brien\\cc-cost\\dist\\cli.js" };
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cc-cost-setup-'));
@@ -55,4 +55,13 @@ test('data folder: reuses an existing cc-cost or claude-cost folder', () => {
     assert.equal(dataFolderIn(root), path.join(root, 'cc-cost'));
     fs.mkdirSync(path.join(root, 'claude-cost'));
     assert.equal(dataFolderIn(root), path.join(root, 'claude-cost'));
+});
+
+test('temporary runners are recognized: npx, yarn dlx, pnpm dlx', () => {
+    const at = (script: string) => isEphemeral({ node: 'node', script });
+    assert.ok(at(String.raw`C:\Users\me\AppData\Local\npm-cache\_npx\1a2b\node_modules\@ugurcandede\cc-cost\dist\cli.js`));
+    assert.ok(at('/tmp/xfs-4f2a1c/dlx-12345/node_modules/@ugurcandede/cc-cost/dist/cli.js'));
+    assert.ok(at('/home/me/.cache/pnpm/dlx/abc123/node_modules/@ugurcandede/cc-cost/dist/cli.js'));
+    assert.ok(!at('/usr/local/lib/node_modules/@ugurcandede/cc-cost/dist/cli.js'));
+    assert.ok(!at(String.raw`C:\Users\me\AppData\Roaming\npm\node_modules\@ugurcandede\cc-cost\dist\cli.js`));
 });
