@@ -1,0 +1,33 @@
+name: Release
+
+# Publishes to npm when a version tag is pushed: npm version patch && git push --follow-tags
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing (OIDC): no token stored; also signs the provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest # trusted publishing needs npm 11.5.1 or later
+      - run: corepack enable
+      - run: yarn install --immutable
+      # yarn rewrites "bin" in package.json to its short form; publish the committed file
+      - run: git checkout -- package.json
+      - name: Tag matches package.json
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version $version in package.json"
+            exit 1
+          fi
+      - run: npm publish # prepack runs typecheck, tests and build first

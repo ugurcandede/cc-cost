@@ -3,7 +3,7 @@
   <h1>cc-cost</h1>
   <p>What your Claude Code usage would cost at API list prices, totalled across all your machines (Windows, Mac, Linux), with an archive that outlives Claude Code's transcript cleanup and a dashboard you open with a double-click.</p>
   <br>
-  <a href="https://github.com/ugurcandede/cc-cost" target="_blank"><img src="https://img.shields.io/badge/version-0.1.1-blue?style=flat-square" alt="Version 0.1.1"></a>
+  <a href="https://www.npmjs.com/package/@ugurcandede/cc-cost" target="_blank"><img src="https://img.shields.io/npm/v/@ugurcandede/cc-cost?style=flat-square&label=version" alt="npm version"></a>
   <img src="https://img.shields.io/badge/Node.js-22%2B%20·%20zero%20dependencies-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 22+, zero dependencies">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License: MIT"></a>
   <br>  

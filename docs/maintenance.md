@@ -93,6 +93,21 @@ cc-cost began as a single script that wrote `<machine>.json` files into a Dropbo
 4. Once every machine runs the new version, the old `<machine>.json` and `report.html` files in the folder
    can be deleted; the new ones live in `machines/` and `dashboard.html`.
 
+## Releasing
+
+Releases are published by `.github/workflows/release.yml` when a version tag is pushed:
+
+```bash
+npm version patch          # or minor / major: bumps package.json, commits and tags vX.Y.Z
+git push --follow-tags
+```
+
+The workflow checks that the tag matches `package.json` and runs `npm publish`, whose `prepack` step runs
+the type check, the tests and the build. It authenticates with npm trusted publishing, so no npm token
+is stored anywhere and each version carries provenance. One-time setup on npmjs.com, in the package's
+settings: add a trusted publisher for GitHub Actions with user `ugurcandede`, repository `cc-cost` and
+workflow `release.yml`.
+
 ## Development
 
 Needs Node 22.18 or newer, which runs the TypeScript sources directly; the published package only needs
