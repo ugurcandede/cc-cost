@@ -125,4 +125,6 @@ test('projects resolve to their git repository', () => {
     assert.equal(projectRoot(path.join(repo, 'deleted', 'dir')), repo, 'a directory removed since');
     assert.equal(projectRoot(tree), repo, 'a worktree');
     assert.equal(projectRoot(plain), plain, 'not a repository');
+    // must not walk up from wherever the test runs, which may itself be a repository
+    assert.equal(projectRoot(path.join('relative', 'app')), path.join('relative', 'app'), 'a path that is not absolute');
 });

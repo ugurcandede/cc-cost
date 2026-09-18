@@ -53,6 +53,8 @@ function defined<O extends object>(o: O): O {
 // counts for its repo. Missing directories (deleted since) resolve through their nearest existing
 // parent; worktrees resolve to their main repository. Falls back to the directory itself.
 export function projectRoot(cwd: string): string {
+    // Walking up a relative path (or a Windows path read on macOS/Linux) would search wherever cc-cost runs from
+    if (!path.isAbsolute(cwd)) return cwd;
     const home = os.homedir();
     for (let dir = cwd; ; ) {
         // a dotfiles repo in $HOME must not claim every project under it
