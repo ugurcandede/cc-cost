@@ -24,7 +24,19 @@ export interface DashboardMeta {
     first: string;
     last: string;
     prices: string;
+    version: string; // cc-cost's own; this and the links come from package.json
+    repo: string;
+    npm: string;
+    site: string;
 }
+
+// Header icons. GitHub mark from Octicons (MIT), npm mark from Simple Icons (CC0).
+const ICON = {
+    logo: `<svg viewBox="0 0 120 120" aria-hidden="true"><rect width="120" height="120" rx="28" fill="#D97757"/><path fill="#fff" d="M40 24H80Q86 24 86 30V96L81.67 91L77.33 96L73 91L68.67 96L64.33 91L60 96L55.67 91L51.33 96L47 91L42.67 96L38.33 91L34 96V30Q34 24 40 24Z"/><rect x="42" y="62" width="8" height="18" rx="2" fill="#D97757"/><rect x="56" y="50" width="8" height="30" rx="2" fill="#D97757"/><rect x="70" y="36" width="8" height="44" rx="2" fill="#D97757"/></svg>`,
+    github: `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>`,
+    npm: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z"/></svg>`,
+    globe: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/></svg>`,
+};
 
 // Strings repeat across thousands of rows; store each once and refer to it by index.
 function dictionary() {
@@ -95,9 +107,22 @@ export function writeDashboard(d: { rows: PricedRow[]; limits: MachineLimit[] },
 body{margin:0;background:var(--plane);color:var(--ink);
   font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:32px 16px 64px}
 .wrap{max-width:1080px;margin:0 auto}
-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.site{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:0 0 16px;margin:0 0 20px;border-bottom:1px solid var(--grid)}
+.logo{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none}
+.logo svg{width:32px;height:32px}
+.logo b{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.logo small{color:var(--muted);font-size:12px;font-weight:500}
+.links{display:flex;align-items:center;gap:4px}
+.links a{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--ink-2)}
+.links a:hover{background:var(--surface);color:var(--ink)}
+.links a:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.links a svg{width:18px;height:18px}
+.links .langs{margin-left:8px}
 h1{font-size:15px;font-weight:600;margin:0 0 2px}
 .sub{color:var(--muted);font-size:13px;margin:0 0 24px}
+.foot{color:var(--muted);font-size:12px;text-align:center;margin:24px 0 0}
+.foot a{color:inherit}
 .langs{display:flex;gap:4px}
 .langs button{font:inherit;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid var(--ring);
   background:var(--surface);color:var(--ink-2);cursor:pointer}
@@ -162,12 +187,19 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 .empty{color:var(--muted);font-size:13px;padding:12px 0}
 </style></head><body>
 <div class="wrap">
-<header>
-  <div><h1 ${text('title')}</h1><p class="sub" id="note"></p></div>
-  <div class="langs" role="group" aria-label="${esc(D.language)}" data-t-aria="language">
-    ${Object.keys(LANGS).map((l) => `<button data-lang="${l}">${l.toUpperCase()}</button>`).join('')}
-  </div>
+<header class="site">
+  <a class="logo" href="${esc(meta.repo)}" target="_blank" rel="noopener">${ICON.logo}<b>cc-cost</b><small>v${esc(meta.version)}</small></a>
+  <nav class="links">
+    <a href="${esc(meta.repo)}" target="_blank" rel="noopener" title="GitHub" aria-label="GitHub">${ICON.github}</a>
+    <a href="${esc(meta.npm)}" target="_blank" rel="noopener" title="npm" aria-label="npm">${ICON.npm}</a>
+    <a href="${esc(meta.site)}" target="_blank" rel="noopener" title="${esc(D.website)}" aria-label="${esc(D.website)}" data-t-title="website" data-t-aria="website">${ICON.globe}</a>
+    <div class="langs" role="group" aria-label="${esc(D.language)}" data-t-aria="language">
+      ${Object.keys(LANGS).map((l) => `<button data-lang="${l}">${l.toUpperCase()}</button>`).join('')}
+    </div>
+  </nav>
 </header>
+<h1 ${text('title')}</h1>
+<p class="sub" id="note"></p>
 
 <div class="filters" role="group" aria-label="${esc(D.timeRange)}" data-t-aria="timeRange">
   <button data-days="1" ${text('today')}</button>
@@ -251,6 +283,7 @@ svg{display:block;width:100%;height:auto;overflow:visible}
   <div class="card"><h2 ${text('byMachine')}</h2><div class="scroll"><table><thead><tr id="hMachines"></tr></thead><tbody id="tMachines"></tbody></table></div></div>
   <div class="card"><h2 ${text('limits')}</h2><div id="limits"></div></div>
 </div>
+<p class="foot"><span id="footText"></span> · <a href="${esc(meta.repo)}" target="_blank" rel="noopener">GitHub</a></p>
 </div>
 <div id="tip" role="status" aria-live="polite"></div>
 
@@ -365,9 +398,11 @@ function applyText() {
   document.documentElement.lang = lang;
   for (const e of document.querySelectorAll('[data-t]')) e.textContent = L[e.dataset.t];
   for (const e of document.querySelectorAll('[data-t-aria]')) e.setAttribute('aria-label', L[e.dataset.tAria]);
+  for (const e of document.querySelectorAll('[data-t-title]')) e.title = L[e.dataset.tTitle];
   for (const b of document.querySelectorAll('[data-lang]')) b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
   const updated = new Date(META.updated).toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US', { timeZone: META.timezone });
   document.getElementById('note').textContent = fill(L.note, { updated, machines: META.machines, min: META.first || '–', max: META.last || '–', prices: META.prices });
+  document.getElementById('footText').textContent = fill(L.footer, { version: META.version });
   fillSelect('fMachine', DATA.machines, L.allMachines, sel.machine);
   fillSelect('fProject', DATA.projects, L.allProjects, sel.project);
   fillSelect('fModel', DATA.models, L.allModels, sel.model);

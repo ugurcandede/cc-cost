@@ -24,6 +24,11 @@ import {
 import { loadAll } from './snapshot.ts';
 import { dashboardPath, sync, type Settings } from './sync.ts';
 
+// Name, version and project page come from package.json only
+const pkg = createRequire(import.meta.url)('../package.json') as { name: string; version: string; homepage: string; author: { url: string } };
+const REPO = pkg.homepage.replace(/#.*$/, '');
+const NPM = `https://www.npmjs.com/package/${pkg.name}`;
+
 const { values: opt, positionals } = parseArgs({
     allowPositionals: true,
     options: {
@@ -145,6 +150,10 @@ function dashboard(d: Data) {
         first: dates[0] ?? '',
         last: dates[dates.length - 1] ?? '',
         prices: `${t.source === 'bundled' ? 'bundled' : 'platform.claude.com'} ${t.date.slice(0, 10)}`,
+        version: pkg.version,
+        repo: REPO,
+        npm: NPM,
+        site: pkg.author.url,
     }, dashboardPath(settings));
 }
 
@@ -177,7 +186,7 @@ async function setup() {
     const interactive = !opt.yes && process.stdin.isTTY;
     const rl = interactive ? readline.createInterface({ input: process.stdin, output: process.stdout }) : undefined;
     try {
-        out(paint('bold', S.title));
+        out(paint('bold', fill(S.title, { version: pkg.version })));
         const next: Config = { ...config };
 
         if (opt['sync-dir']) next.syncDir = path.resolve(opt['sync-dir']);
@@ -225,6 +234,7 @@ async function status() {
     const snaps = loadAll(settings.syncDir);
     const prices = await loadPrices(pricesCache(), { offline: true });
     const info = {
+        version: pkg.version,
         config: configFile(),
         syncDir: settings.syncDir,
         machine: settings.machine,
@@ -237,6 +247,7 @@ async function status() {
     if (opt.json) return out(JSON.stringify(info, null, 2));
     const when = (iso: string) => (iso ? new Date(iso).toLocaleString(lang() === 'tr' ? 'tr-TR' : 'en-US', { timeZone: settings.timezone }) : '–');
     const pairs: [string, string][] = [
+        [St.version, info.version],
         [St.config, info.config + (fs.existsSync(info.config) ? '' : ' (–)')],
         [St.syncDir, info.syncDir],
         [St.machine, info.machine],
@@ -251,8 +262,8 @@ async function status() {
 }
 
 async function main() {
-    if (opt.help) return out(L().help);
-    if (opt.version) return out(createRequire(import.meta.url)('../package.json').version);
+    if (opt.help) return out(fill(L().help, { version: pkg.version, url: REPO }));
+    if (opt.version) return out(pkg.version);
     const [cmd = '', ...rest] = positionals;
     const tableCommands = [...PERIODS, ...DIMENSIONS, 'plan', 'blocks'] as string[];
     if (opt.csv && !tableCommands.includes(cmd)) fail(L().csvUnsupported);

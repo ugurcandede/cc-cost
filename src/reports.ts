@@ -400,7 +400,7 @@ export function planReport(rows: PricedRow[], limits: MachineLimit[], opts: { ti
     const perMonth = foot[3] as number;
     const price = opts.plan ? PLANS[opts.plan] : undefined;
     const notes = [
-        price ? fill(P.yours, { plan: planName[opts.plan!] ?? opts.plan!, price, multiple: (perMonth / price).toFixed(1) + '×' }) : P.noPlan,
+        price ? fill(P.yours, { plan: planName[opts.plan!] ?? opts.plan!, price, multiple: (perMonth / price).toFixed(1) }) : P.noPlan,
         paint('dim', P.note),
     ];
     const json = {
