@@ -1,0 +1,38 @@
+{
+  "name": "cc-cost",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API-equivalent cost of your Claude Code usage, across all your machines, with an archive that outlives transcript cleanup.",
+  "author": "Ugurcan Dede <ugurcan.dede@outlook.com.tr>",
+  "contributors": [
+    "Claude <noreply@anthropic.com> (https://claude.com/claude-code)"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "bin": "dist/cli.js",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "node src/cli.ts",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "cost",
+    "usage",
+    "tokens",
+    "anthropic"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "typescript": "^6.0.3"
+  },
+  "packageManager": "yarn@4.13.0"
+}

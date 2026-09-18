@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="cc-cost">
+  <rect width="120" height="120" rx="28" fill="#D97757"/>
+  <!-- a receipt with a torn edge: the bill -->
+  <path fill="#ffffff" d="M40 24H80Q86 24 86 30V96L81.67 91L77.33 96L73 91L68.67 96L64.33 91L60 96L55.67 91L51.33 96L47 91L42.67 96L38.33 91L34 96V30Q34 24 40 24Z"/>
+  <!-- rising usage on it -->
+  <rect x="42" y="62" width="8" height="18" rx="2" fill="#D97757"/>
+  <rect x="56" y="50" width="8" height="30" rx="2" fill="#D97757"/>
+  <rect x="70" y="36" width="8" height="44" rx="2" fill="#D97757"/>
+</svg>
