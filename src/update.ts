@@ -55,7 +55,8 @@ export function installMethod(script: string): InstallMethod {
 }
 
 export const updateCommand: Record<'npm' | 'yarn' | 'pnpm', (pkg: string) => string[]> = {
-    npm: (pkg) => ['npm', 'i', '-g', `${pkg}@latest`],
+    // right after a release npm's cached metadata can still lack the new version (ETARGET)
+    npm: (pkg) => ['npm', 'i', '-g', `${pkg}@latest`, '--prefer-online'],
     yarn: (pkg) => ['yarn', 'global', 'add', `${pkg}@latest`],
     pnpm: (pkg) => ['pnpm', 'add', '-g', `${pkg}@latest`],
 };
