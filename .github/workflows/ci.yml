@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} · Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn typecheck
+      - run: yarn test
+      - run: yarn build
+
+      - name: CLI smoke test
+        shell: bash
+        run: |
+          node dist/cli.js --version
+          node dist/cli.js daily --offline --no-color --sync-dir "$RUNNER_TEMP/sync"
+
+      # Installs the real schedule and hook on the runner, against a throwaway Claude config, then removes them.
+      # Runners may lack a scheduler session (no systemd user bus on Linux), so a missing schedule only warns.
+      - name: Setup and remove
+        shell: bash
+        env:
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude
+        run: |
+          node -e "require('fs').mkdirSync(require('path').join(process.env.CLAUDE_CONFIG_DIR, 'projects'), { recursive: true })"
+          node dist/cli.js setup --yes --offline --no-color --sync-dir "$RUNNER_TEMP/sync"
+          node dist/cli.js status --json > status.json
+          node -e "const s = require('./status.json'); console.log(s); if (!s.hook) process.exit(1); if (!s.schedule) console.log('::warning::no daily schedule on ' + process.platform)"
+          node dist/cli.js setup --remove --no-color
+          node dist/cli.js status --json > status.json
+          node -e "const s = require('./status.json'); if (s.hook || s.schedule) process.exit(1)"

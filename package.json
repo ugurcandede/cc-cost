@@ -1,38 +1,73 @@
 {
   "name": "cc-cost",
   "version": "0.1.0",
-  "private": true,
-  "description": "API-equivalent cost of your Claude Code usage, across all your machines, with an archive that outlives transcript cleanup.",
-  "author": "Ugurcan Dede <ugurcan.dede@outlook.com.tr>",
-  "contributors": [
-    "Claude <noreply@anthropic.com> (https://claude.com/claude-code)"
-  ],
-  "license": "MIT",
-  "type": "module",
-  "bin": "dist/cli.js",
-  "files": [
-    "dist"
-  ],
-  "engines": {
-    "node": ">=22"
-  },
-  "scripts": {
-    "build": "tsc",
-    "dev": "node src/cli.ts",
-    "test": "node --test \"test/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
-  },
+  "description": "API-equivalent cost of your Claude Code usage across all your machines, with an archive that outlives transcript cleanup and an offline dashboard.",
   "keywords": [
     "claude",
     "claude-code",
+    "anthropic",
     "cost",
     "usage",
     "tokens",
-    "anthropic"
+    "pricing",
+    "prompt-caching",
+    "subscription",
+    "cli",
+    "dashboard",
+    "analytics"
   ],
+  "homepage": "https://github.com/ugurcandede/cc-cost#readme",
+  "bugs": {
+    "url": "https://github.com/ugurcandede/cc-cost/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ugurcandede/cc-cost.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Ugurcan Dede",
+    "email": "ugurcan.dede@outlook.com.tr",
+    "url": "https://ugurcandede.github.io"
+  },
+  "contributors": [
+    {
+      "name": "Claude",
+      "email": "noreply@anthropic.com",
+      "url": "https://claude.com/claude-code"
+    }
+  ],
+  "type": "module",
+  "bin": {
+    "cc-cost": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
+    "dev": "node src/cli.ts",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "prepack": "yarn typecheck && yarn test && yarn build"
+  },
   "devDependencies": {
     "@types/node": "^22.20.3",
     "typescript": "^6.0.3"
   },
+  "engines": {
+    "node": ">=22"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=22.18"
+    }
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
   "packageManager": "yarn@4.13.0"
 }

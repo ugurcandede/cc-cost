@@ -142,7 +142,9 @@ export function installSchedule(r: Runner): ScheduleResult {
         const domain = `gui/${process.getuid!()}`;
         run('launchctl', ['bootout', `${domain}/${LAUNCHD_LABEL}`]); // not loaded yet is fine
         const res = run('launchctl', ['bootstrap', domain, plist]);
-        return res.status === 0 ? { ok: true, what: `${plist}, ${SCHEDULE_TIME}` } : { ok: false, what: (res.stderr || '').trim() };
+        if (res.status === 0) return { ok: true, what: `${plist}, ${SCHEDULE_TIME}` };
+        fs.rmSync(plist, { force: true }); // a plist left behind would read as installed
+        return { ok: false, what: (res.stderr || '').trim() };
     }
     const units = systemdUnits(r), dir = systemdDir();
     if (run('systemctl', ['--user', '--version']).status !== 0) return { ok: false, what: 'systemctl --user is not available' };
@@ -151,7 +153,10 @@ export function installSchedule(r: Runner): ScheduleResult {
     fs.writeFileSync(path.join(dir, 'cc-cost.timer'), units.timer);
     run('systemctl', ['--user', 'daemon-reload']);
     const res = run('systemctl', ['--user', 'enable', '--now', 'cc-cost.timer']);
-    return res.status === 0 ? { ok: true, what: `${path.join(dir, 'cc-cost.timer')}, ${SCHEDULE_TIME}` } : { ok: false, what: (res.stderr || '').trim() };
+    if (res.status === 0) return { ok: true, what: `${path.join(dir, 'cc-cost.timer')}, ${SCHEDULE_TIME}` };
+    // e.g. no user session bus; unit files left behind would read as installed
+    for (const f of ['cc-cost.timer', 'cc-cost.service']) fs.rmSync(path.join(dir, f), { force: true });
+    return { ok: false, what: (res.stderr || '').trim() };
 }
 
 export function scheduleInstalled(): boolean {

@@ -78,6 +78,9 @@ cc-cost began as a single script that wrote `<machine>.json` files into a Dropbo
 
 ## Development
 
+Needs Node 22.18 or newer, which runs the TypeScript sources directly; the published package only needs
+Node 22.
+
 ```bash
 yarn install
 yarn dev daily        # runs src/cli.ts directly; Node strips the types
