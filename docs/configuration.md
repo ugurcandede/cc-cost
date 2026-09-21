@@ -69,5 +69,6 @@ timestamps and the rate-limit events Claude Code recorded. It never contains pro
 file names or paths; a project is the name of its repository folder, or a hash of it with
 `anonymizeProjects`.
 
-The only network request cc-cost makes is fetching the public pricing page, at most once a day.
-`--offline` turns that off.
+Reports make at most two network requests a day: the public pricing page, and the npm registry to see
+whether a newer cc-cost is out. Neither sends anything about your usage. `--offline` turns both off;
+`--json`, `--csv` and `--quiet` skip the version check.

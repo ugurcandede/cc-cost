@@ -74,7 +74,7 @@ there with a note on stderr.
 | `--tz <zone>` | IANA time zone for day boundaries, e.g. `Europe/Istanbul` |
 | `--no-color` | Plain text; also off when output isn't a terminal or `NO_COLOR` is set |
 | `--no-sync` | Report from the stored snapshots without scanning transcripts |
-| `--offline` | Don't fetch prices; use the cached or bundled table |
+| `--offline` | Don't fetch prices or check for a new version; use the cached or bundled price table |
 | `--quiet` | Print nothing on success; for schedulers and hooks |
 | `--sync-dir <path>` | Shared folder for this run |
 | `-h`, `--help` / `-v`, `--version` | |

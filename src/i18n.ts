@@ -43,7 +43,7 @@ Output:
   --tz <zone>        IANA time zone for day boundaries
   --no-color         Plain text
   --no-sync          Report from stored data without scanning transcripts
-  --offline          Don't fetch live prices
+  --offline          Don't fetch live prices or check for a new version
   --quiet            Print nothing on success (for schedulers and hooks)
   --sync-dir <path>  Folder shared between machines
   -h, --help         This help
@@ -259,7 +259,7 @@ Filtreler:
   --tz <bölge>       Gün sınırı için IANA saat dilimi
   --no-color         Düz metin
   --no-sync          Transcript taramadan, kayıtlı veriden raporla
-  --offline          Canlı fiyat çekme
+  --offline          Canlı fiyat çekme, yeni sürüm kontrol etme
   --quiet            Başarıda hiçbir şey basma (zamanlayıcı ve hook için)
   --sync-dir <yol>   Makineler arası paylaşılan klasör
   -h, --help         Bu yardım
