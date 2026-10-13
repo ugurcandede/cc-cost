@@ -124,6 +124,26 @@ yarn build            # compiles to dist/ for npm
 The snapshot format (`src/types.ts`) outlives the transcripts it was built from: add fields at the end,
 never change the meaning of an existing one.
 
+Where things are, in the order data flows through them:
+
+| File | Does |
+|---|---|
+| `cli.ts` | Flags, settings, the commands; `status` |
+| `wizard.ts` | The questions `setup` and `config` ask in a terminal |
+| `prompt.ts` | Arrow-key menus, checklists and text input for the wizard |
+| `paths.ts`, `config.ts` | Claude Code folders, the config file, plans |
+| `accounts.ts` | Which account a Claude folder is logged in to, and its plan |
+| `scan.ts` | Transcripts → rows per day, project, session, model, account |
+| `snapshot.ts`, `sync.ts` | The per-machine file, the archive merge, a sync run |
+| `remote.ts` | The exchange with an SSH server |
+| `pricing.ts`, `aggregate.ts` | Prices, costing, filters, totals |
+| `reports.ts`, `dashboard.ts` | Terminal reports, the HTML dashboard |
+| `setup.ts` | Synced folders, the schedule, the Claude Code hook |
+| `i18n.ts`, `format.ts` | Every user-facing string in both languages; tables and colors |
+
+Every user-facing string lives in `i18n.ts`, and `test/i18n.test.ts` checks that `tr` mirrors `en`.
+Adding a command or flag touches `cli.ts`, the `help` text in both languages, and `docs/cli.md`.
+
 A demo mode runs the sources against two pretend machines, one with two Claude accounts, and a
 throwaway SSH server in Docker, without touching your real setup. See
 [scripts/demo/README.md](../scripts/demo/README.md).

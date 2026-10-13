@@ -31,7 +31,7 @@ cc-cost pricing                  # prices in use and their source
 cc-cost pricing --refresh        # fetch the pricing page now
 
 cc-cost setup                    # interactive first-time setup
-cc-cost setup --yes              # accept the defaults (Dropbox or similar folder if found)
+cc-cost setup --yes              # no questions: the first synced folder found, the plans found in the logins
 cc-cost setup --sync-dir <path>  # skip the folder question
 cc-cost setup --no-schedule      # don't schedule the daily run
 cc-cost setup --no-hook          # don't add the SessionEnd hook
@@ -91,5 +91,6 @@ cc-cost projects --machine macbook --since 2026-09-01
 cc-cost sessions --project api --limit 5 --json
 cc-cost monthly --csv > usage.csv
 cc-cost insights --model fable
+cc-cost plan --account work
 cc-cost blocks --last 2
 ```

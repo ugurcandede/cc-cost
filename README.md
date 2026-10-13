@@ -27,8 +27,8 @@
 ```bash
 npm i -g @ugurcandede/cc-cost          # or, with Yarn 1: yarn global add @ugurcandede/cc-cost
 
-# Pick the folder your machines share (Dropbox, iCloud Drive, OneDrive, Syncthing, …),
-# your language and plan; schedule a daily sync and add the Claude Code hook.
+# Pick where the data lives (a folder your machines share, or your own server over SSH),
+# name your Claude accounts and their plans; schedule a daily sync and add the Claude Code hook.
 cc-cost setup
 
 cc-cost                  # sync this machine, print a summary
@@ -46,7 +46,8 @@ since the schedule and hook point at it.
 ## Prerequisites
 
 - Node.js 22 or newer (no runtime dependencies)
-- Claude Code, which keeps its transcripts in `~/.claude/projects`
+- Claude Code, which keeps its transcripts in `~/.claude/projects`; several accounts in separate folders
+  (`CLAUDE_CONFIG_DIR`) are read together and told apart
 - For several machines: a folder they all sync. Without one, cc-cost counts this machine only
 
 ## Everyday commands
@@ -54,10 +55,10 @@ since the schedule and hook point at it.
 ```bash
 cc-cost                      # sync, summary, dashboard
 cc-cost daily --last 7       # also weekly, monthly; --breakdown adds per-model rows
-cc-cost projects             # also models, machines, sessions
+cc-cost projects             # also models, machines, accounts, sessions
 cc-cost agents               # main thread vs subagents; also skills, mcp
 cc-cost insights             # context size, cache efficiency, what drives the cost
-cc-cost plan                 # API equivalent vs Pro / Max 5x / Max 20x, rate-limit hits
+cc-cost plan                 # API equivalent vs your plans (Pro, Max, Team), per account and together
 cc-cost blocks               # usage in Claude's 5-hour windows
 cc-cost status               # settings, machines, schedule, hook
 cc-cost update               # update to the latest version
@@ -81,6 +82,7 @@ Every report takes the same filters and output options:
 
 ```bash
 cc-cost daily --since 2026-09-01 --machine macbook --model opus
+cc-cost models --account work     # one Claude account; also --project, --session, --agent
 cc-cost sessions --project api --limit 10
 cc-cost monthly --json            # or --csv
 cc-cost insights --lang tr        # interface language: en (default) or tr
@@ -88,7 +90,9 @@ cc-cost insights --lang tr        # interface language: en (default) or tr
 
 ## How it differs from other tools
 
-- **Several machines, one total**: through a folder you already sync; no server, no account.
+- **Several machines, one total**: through a folder you already sync, or your own server over SSH; no
+  service in between.
+- **Several Claude accounts**: a Max account and a Team seat, each against its own plan, together or apart.
 - **History that stays**: numbers are kept after Claude Code deletes old transcripts.
 - **A dashboard in one file**: date, machine, project and model filters, works offline.
 - **Insights, not just totals**: context size per call, cache hit ratio, subagents, skills, MCP servers,
