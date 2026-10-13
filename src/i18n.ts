@@ -19,7 +19,7 @@ Commands:
   plan                          API equivalent vs subscription prices, rate-limit hits
   report                        Open the HTML dashboard (--location prints its path instead)
   pricing                       Prices in use (--refresh to fetch them again)
-  setup                         Pick the shared folder, schedule daily runs, add the Claude Code hook
+  setup                         Where the data lives, your accounts and plans, daily runs, the Claude Code hook
   status                        Settings, machines, last sync, scheduler and hook
   update                        Update cc-cost to the latest version
   config                        Edit settings in a menu (prints them with --json or without a terminal);
@@ -334,7 +334,7 @@ Komutlar:
   plan                          API karşılığı ve abonelik fiyatları, limit aşımları
   report                        HTML dashboard'u aç (--location sadece yolunu basar)
   pricing                       Kullanılan fiyatlar (--refresh ile yeniden çek)
-  setup                         Paylaşılan klasörü seç, günlük çalışmayı zamanla, Claude Code hook'unu ekle
+  setup                         Verinin yeri, hesapların ve planların, günlük çalışma, Claude Code hook'u
   status                        Ayarlar, makineler, son senkron, zamanlayıcı ve hook
   update                        cc-cost'u en son sürüme güncelle
   config                        Ayarları menüden düzenle (--json ile ya da terminal yoksa yazdırır);

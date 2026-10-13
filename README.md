@@ -116,7 +116,8 @@ and on each machine:
 ```
 ~/.config/cc-cost/          # %APPDATA%\cc-cost on Windows
 ├── config.json             # cc-cost config
-└── pricing-cache.json      # last prices read from the pricing page
+├── pricing-cache.json      # last prices read from the pricing page
+└── update-check.json       # when the npm registry was last asked for a newer version
 ```
 
 ## Safety
