@@ -164,9 +164,11 @@ Reports can show the accounts together or one at a time:
 - `cc-cost plan` sets each account against its own plan, then all of them against the paid plans
   together: what you pay in total.
 - `cc-cost blocks` and the rate-limit hits are per account, since every subscription has its own limits.
-- The dashboard has an account filter and can chart by account. Its plan multiple sets the accounts in
-  view against their paid plans, over the days they were in use; sponsored seats and accounts without a
-  known plan are named under it instead.
+- The dashboard shows the accounts as buttons above the other filters and, with all of them selected, a
+  card per account inside the total: its cost, share and multiple against its own plan (a card picks
+  that account). The chart can be stacked by account. The plan multiple sets the accounts in view against
+  their paid plans, over the days they were in use; sponsored seats and accounts without a known plan
+  are named under it instead.
 
 Usage synced before an account was known (cc-cost 0.1 and earlier) has none. `setup` asks whose it is
 on each machine; until then it shows as `(unknown)` and is priced against the `plan` setting.

@@ -26,4 +26,9 @@ test('dashboard: the page reads the account from where encode() puts it, and get
     assert.deepEqual(data.rows.map((r: number[]) => data.accounts[r[at]!]), ['Personal', 'Work'], 'R.account points at the account column');
     assert.equal(data.rows[0].length, at + 1, 'the account column is the last one, appended');
     assert.deepEqual(JSON.parse(html.match(/const META = (.*);\n/)![1]!).accounts, meta.accounts);
+    // accounts are picked with buttons and shown as cards, not through a select
+    assert.ok(html.includes('id="accountRow"') && html.includes('id="accts"') && !html.includes('id="fAccount"'));
+    // the filter rows: account, then scope and breakdown, then the period
+    const labels = [...html.matchAll(/class="flabel grp"[^>]*data-t="(\w+)"/g)].map((m) => m[1]);
+    assert.deepEqual(labels, ['account', 'scope', 'breakdown', 'groupBy', 'period']);
 });

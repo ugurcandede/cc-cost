@@ -103,6 +103,8 @@ scripts/demo/demo.sh demo-pc plan               # each account against its own p
 scripts/demo/demo.sh demo-pc blocks --last 1    # 5-hour windows, one timeline per account
 scripts/demo/demo.sh demo-pc models --account work
 scripts/demo/demo.sh demo-pc config             # Claude accounts: rename, change a plan, a sponsored seat
+scripts/demo/demo.sh demo-pc report --location  # open the printed dashboard.html: account buttons above the
+                                                # filters, a card per account in the total, chart by account
 ```
 
 Usage from before accounts were told apart has no account. To see the question setup asks about it, give

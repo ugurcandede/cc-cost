@@ -179,6 +179,7 @@ h1{font-size:15px;font-weight:600;margin:0 0 2px}
   background:var(--surface);color:var(--ink-2);cursor:pointer}
 .langs button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 
+[hidden]{display:none!important}
 .filters{display:flex;gap:6px;align-items:center;margin:0 0 12px;flex-wrap:wrap}
 .filters.last{margin-bottom:24px}
 .filters button{font:inherit;font-size:13px;padding:6px 14px;border-radius:999px;
@@ -192,6 +193,7 @@ h1{font-size:15px;font-weight:600;margin:0 0 2px}
 .range input:focus,.filters select:focus{outline:2px solid var(--ink);outline-offset:1px}
 .range[data-on="1"] input,.filters select.on{color:var(--ink);border-color:var(--ink);font-weight:600}
 .flabel{color:var(--muted);font-size:12px}
+.flabel.grp{min-width:54px}
 .reset{display:none}
 .range[data-on="1"] ~ .reset{display:inline-block}
 
@@ -206,6 +208,15 @@ h1{font-size:15px;font-weight:600;margin:0 0 2px}
 .tile-l{color:var(--muted);font-size:12px;margin:0 0 4px}
 .tile-v{font-size:22px;font-weight:600;margin:0}
 .tile-n{color:var(--muted);font-size:12px;margin:3px 0 0}
+.accts{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0 0}
+.acct{font:inherit;text-align:left;background:var(--plane);border:1px solid var(--ring);border-radius:8px;
+  padding:12px 14px;cursor:pointer;color:var(--ink)}
+.acct:hover{border-color:var(--ink-2)}
+.acct:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.acct .n{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px;margin:0 0 4px}
+.acct .n b{color:var(--ink);font-weight:600}
+.acct .v{font-size:20px;font-weight:600;margin:0;font-variant-numeric:tabular-nums}
+.acct .s{color:var(--muted);font-size:12px;margin:4px 0 0}
 
 h2{font-size:13px;font-weight:600;margin:0 0 2px}
 h2 + .scroll,h2 + div{margin-top:14px}
@@ -260,7 +271,27 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 <h1 ${text('title')}</h1>
 <p class="sub" id="note"></p>
 
-<div class="filters" role="group" aria-label="${esc(D.timeRange)}" data-t-aria="timeRange">
+<div class="filters" id="accountRow" role="group" aria-label="${esc(D.account)}" data-t-aria="account" hidden>
+  <span class="flabel grp" ${text('account')}</span>
+</div>
+<div class="filters">
+  <span class="flabel grp" ${text('scope')}</span>
+  <select id="fMachine" aria-label="${esc(D.machine)}" data-t-aria="machine"></select>
+  <span class="fsep"></span>
+  <span class="flabel grp" ${text('breakdown')}</span>
+  <select id="fProject" aria-label="${esc(D.project)}" data-t-aria="project"></select>
+  <select id="fModel" aria-label="${esc(D.model)}" data-t-aria="model"></select>
+  <span class="fsep"></span>
+  <label class="flabel grp" for="groupBy" ${text('groupBy')}</label>
+  <select id="groupBy">
+    <option value="model" ${text('byModelOpt')}</option>
+    <option value="project" ${text('byProjectOpt')}</option>
+    <option value="machine" ${text('byMachineOpt')}</option>
+    <option value="account" id="byAccount" hidden ${text('byAccountOpt')}</option>
+  </select>
+</div>
+<div class="filters last" role="group" aria-label="${esc(D.timeRange)}" data-t-aria="timeRange">
+  <span class="flabel grp" ${text('period')}</span>
   <button data-days="1" ${text('today')}</button>
   <button data-days="-1" ${text('yesterday')}</button>
   <button data-days="7" ${text('last7')}</button>
@@ -275,25 +306,12 @@ svg{display:block;width:100%;height:auto;overflow:visible}
   </span>
   <button class="reset" id="reset" ${text('clear')}</button>
 </div>
-<div class="filters last">
-  <select id="fMachine" aria-label="${esc(D.machine)}" data-t-aria="machine"></select>
-  <select id="fAccount" aria-label="${esc(D.account)}" data-t-aria="account" hidden></select>
-  <select id="fProject" aria-label="${esc(D.project)}" data-t-aria="project"></select>
-  <select id="fModel" aria-label="${esc(D.model)}" data-t-aria="model"></select>
-  <span class="fsep"></span>
-  <label class="flabel" for="groupBy" ${text('groupBy')}</label>
-  <select id="groupBy">
-    <option value="model" ${text('byModelOpt')}</option>
-    <option value="project" ${text('byProjectOpt')}</option>
-    <option value="machine" ${text('byMachineOpt')}</option>
-    <option value="account" id="byAccount" hidden ${text('byAccountOpt')}</option>
-  </select>
-</div>
 
 <div class="card">
   <p class="hero-label" id="heroLabel"></p>
   <p class="hero" id="hero">$0</p>
   <p class="hero-note" ${text('heroNote')}</p>
+  <div class="accts" id="accts" hidden></div>
   <div class="tiles">
     <div><p class="tile-l" ${text('dailyAvg')}</p><p class="tile-v" id="tAvg">&ndash;</p><p class="tile-n" id="tAvgN"></p></div>
     <div><p class="tile-l" id="tMultL"></p><p class="tile-v" id="tMult">&ndash;</p><p class="tile-n" id="tMultN"></p></div>
@@ -457,6 +475,26 @@ function series(rs) {
   return { key: r => top.includes(key(r)) ? key(r) : OTHER, list, hue: k => hue(k === OTHER ? 8 : top.indexOf(k) + 1), label: k => k === OTHER ? L.other : k };
 }
 
+// Account pills: All, then one per account; shown only with several accounts
+function fillAccountRow() {
+  const row = document.getElementById('accountRow');
+  for (const b of row.querySelectorAll('button')) b.remove();
+  for (const [value, label] of [['', L.all], ...[...DATA.accounts].sort().map(a => [a, a])]) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.dataset.account = value;
+    b.setAttribute('aria-pressed', String(value === sel.account));
+    b.addEventListener('click', () => pickAccount(value));
+    row.append(b);
+  }
+  row.hidden = !SEVERAL_ACCOUNTS;
+}
+function pickAccount(value) {
+  sel.account = value;
+  for (const b of document.querySelectorAll('#accountRow button')) b.setAttribute('aria-pressed', String(b.dataset.account === value));
+  render();
+}
+
 function fillSelect(id, values, all, current) {
   const s = document.getElementById(id);
   s.textContent = '';
@@ -476,8 +514,7 @@ function applyText() {
   document.getElementById('note').textContent = fill(L.note, { updated, machines: META.machines, min: META.first || '–', max: META.last || '–', prices: META.prices });
   document.getElementById('footText').textContent = fill(L.footer, { version: META.version });
   fillSelect('fMachine', DATA.machines, L.allMachines, sel.machine);
-  fillSelect('fAccount', DATA.accounts, L.allAccounts, sel.account);
-  document.getElementById('fAccount').hidden = !SEVERAL_ACCOUNTS;
+  fillAccountRow();
   document.getElementById('byAccount').hidden = !SEVERAL_ACCOUNTS;
   fillSelect('fProject', DATA.projects, L.allProjects, sel.project);
   fillSelect('fModel', DATA.models, L.allModels, sel.model);
@@ -519,6 +556,7 @@ function render() {
   document.getElementById('tMult').textContent = active && price ? (paidCost / (price * paidSpan / 30)).toFixed(1) + '×' : '–';
   document.getElementById('tMultN').textContent = !active ? '' :
     [fill(L.normalized, { n: price ? paidSpan : span }), ...(left.length ? [fill(L.leftOut, { names: left.join(', ') })] : [])].join(' · ');
+  drawAccounts(rs, total);
   document.getElementById('tCalls').textContent = NF.format(calls);
   document.getElementById('tCallsN').textContent = fill(L.perCall, { cost: $$(total / (calls || 1)) });
   document.getElementById('tHit').textContent = ctx ? pct(read, ctx) : '–';
@@ -555,6 +593,36 @@ function render() {
   table('Skills', [[L.skillCol], ...small], sumBy(rs.filter(r => r.skill), r => r.skill).slice(0, 10).map(([k, g]) => smallRow(k, g)));
   table('Mcp', [[L.mcpCol], ...small], sumBy(rs.filter(r => r.mcp), r => r.mcp).slice(0, 10).map(([k, g]) => smallRow(k, g)));
   drawLimits();
+}
+
+// One card per account, with its cost, share and multiple against its own plan, when all accounts are
+// shown together; a card picks that account. Every account keeps its card whatever the period, at $0 when
+// it has no usage in it, so the cards never come and go.
+function drawAccounts(rs, total) {
+  const host = document.getElementById('accts');
+  host.textContent = '';
+  host.hidden = !(SEVERAL_ACCOUNTS && !sel.account);
+  if (host.hidden) return;
+  const byAccount = new Map(sumBy(rs, r => r.account));
+  for (const a of [...DATA.accounts].sort()) {
+    const g = byAccount.get(a) || { c: 0, days: new Set() };
+    const meta = META.accounts[a] || {};
+    const card = document.createElement('button');
+    card.className = 'acct'; card.type = 'button';
+    card.addEventListener('click', () => pickAccount(a));
+    const n = document.createElement('p'); n.className = 'n';
+    const name = document.createElement('b'); name.textContent = a;
+    const plan = document.createElement('span'); plan.textContent = meta.plan || '–';
+    if (meta.beta) { const b = document.createElement('span'); b.className = 'beta'; b.textContent = 'beta'; b.title = L.betaTitle; plan.append(b); }
+    n.append(name, plan);
+    const v = document.createElement('p'); v.className = 'v'; v.textContent = $$(g.c);
+    const s = document.createElement('p'); s.className = 's';
+    const own = !(meta.price > 0) ? L.acctNoMultiple
+      : g.days.size ? fill(L.acctMultiple, { x: (g.c / (meta.price * calendarSpan([...g.days].sort()) / 30)).toFixed(1) }) : '–';
+    s.textContent = fill(L.acctShare, { pct: pct(g.c, total) }) + ' · ' + own;
+    card.append(n, v, s);
+    host.append(card);
+  }
 }
 
 function swatch(text, color) {
@@ -784,7 +852,7 @@ for (const i of [FROM, TO]) {
 }
 document.getElementById('reset').addEventListener('click', () => { custom = null; days = 30; syncInputs(); render(); });
 
-for (const [id, key] of [['fMachine', 'machine'], ['fAccount', 'account'], ['fProject', 'project'], ['fModel', 'model']]) {
+for (const [id, key] of [['fMachine', 'machine'], ['fProject', 'project'], ['fModel', 'model']]) {
   const s = document.getElementById(id);
   s.addEventListener('change', () => { sel[key] = s.value; s.classList.toggle('on', !!s.value); render(); });
 }
