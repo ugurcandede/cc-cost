@@ -123,3 +123,7 @@ yarn build            # compiles to dist/ for npm
 
 The snapshot format (`src/types.ts`) outlives the transcripts it was built from: add fields at the end,
 never change the meaning of an existing one.
+
+A demo mode runs the sources against two pretend machines, one with two Claude accounts, and a
+throwaway SSH server in Docker, without touching your real setup. See
+[scripts/demo/README.md](../scripts/demo/README.md).
