@@ -33,11 +33,12 @@ cc-cost setup --yes              # accept the defaults (Dropbox or similar folde
 cc-cost setup --sync-dir <path>  # skip the folder question
 cc-cost setup --no-schedule      # don't schedule the daily run
 cc-cost setup --no-hook          # don't add the SessionEnd hook
-cc-cost setup --remove           # remove the schedule and the hook
+cc-cost setup --remove           # remove the schedule and the hook (asks first in a terminal)
 
 cc-cost status                   # settings, machines and their last update, schedule, hook, prices
 cc-cost update                   # update to the latest version with the package manager that installed it
-cc-cost config                   # current settings
+cc-cost config                   # settings menu in a terminal; prints them with --json or without one
+cc-cost config --json            # current settings as JSON
 cc-cost config set <key> <value> # change one; see configuration.md
 ```
 

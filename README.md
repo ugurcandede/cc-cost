@@ -36,8 +36,8 @@ cc-cost report           # open the dashboard
 ```
 
 Run `setup` on every machine and point them at the same folder. Each one adds its numbers; every one
-sees the total. No cloud account? Keep the folder on a Raspberry Pi or your own server with Syncthing:
-see [the shared folder](docs/configuration.md#your-own-server-raspberry-pi-home-server-vps).
+sees the total. No cloud account? Share through a Raspberry Pi or your own server over SSH, with nothing
+to install: see [your own server](docs/configuration.md#your-own-server-over-ssh-raspberry-pi-home-server-vps).
 
 Yarn 2 and later have no global installs: install with npm, or try a report once with
 `yarn dlx @ugurcandede/cc-cost` (or `npx @ugurcandede/cc-cost`). `setup` needs a permanent install,

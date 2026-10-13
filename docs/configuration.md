@@ -2,7 +2,8 @@
 
 ## Settings
 
-`cc-cost config` prints them; `cc-cost config set <key> <value>` changes one. The file is
+`cc-cost config` opens a menu to change them in a terminal, and prints them with `--json` or without
+a terminal; `cc-cost config set <key> <value>` changes one. The file is
 `%APPDATA%\cc-cost\config.json` on Windows and `$XDG_CONFIG_HOME/cc-cost/config.json`
 (`~/.config/cc-cost/config.json`) elsewhere.
 
@@ -15,6 +16,7 @@
 | `plan` | `max5x` | `pro`, `max5x` or `max20x`; the dashboard's plan multiple and `plan` use it |
 | `anonymizeProjects` | `false` | `true` stores a hash of each project name instead of the name |
 | `pricing` | | Price overrides, below. Edit the file for this one |
+| `remote` | | `user@host:path` of a server to share through over SSH; see [below](#your-own-server-over-ssh-raspberry-pi-home-server-vps) |
 | `claudeDirs` | `~/.claude`, `~/.config/claude` | Claude Code data folders to read, one per account; comma-separated with `config set`. Overrides `CLAUDE_CONFIG_DIR` |
 
 Command-line flags win over the file for a single run: `--sync-dir`, `--lang`, `--tz`.
@@ -35,44 +37,70 @@ sync service may keep a "conflicted copy"; delete it.
 Machine names come from the hostname. If a hostname changes, a new file appears and the old one keeps
 counting; delete the old file if that machine is gone, or set `machine` to keep the old name.
 
-### Your own server: Raspberry Pi, home server, VPS
+### Your own server over SSH: Raspberry Pi, home server, VPS
 
-To keep the data on a machine you own instead of a cloud service, sync the folder with
-[Syncthing](https://syncthing.net). It copies folders directly between your devices, encrypted, with no
-account. cc-cost does not run on the server; the server only holds a copy of the folder and is always on,
-so your machines exchange their files through it even when they are never online at the same time.
+To keep the data on a machine you own, set `remote` to a server you can reach with `ssh`. Nothing extra
+is installed anywhere: cc-cost runs the `ssh` and `scp` that come with macOS, Linux and Windows 10 and
+later, and the server needs only an SSH server and a POSIX shell (Raspberry Pi OS, any Linux, a NAS).
+cc-cost does not run on the server.
 
-1. **Server.** Install Syncthing (`sudo apt install syncthing` on Raspberry Pi OS and Debian) and run it
-   as a service of your user: `systemctl --user enable --now syncthing` and
-   `sudo loginctl enable-linger $USER`, so it keeps running after you log out. Its web interface listens
-   on `127.0.0.1:8384`; from another machine reach it through `ssh -L 8384:127.0.0.1:8384 pi@<server>`.
-2. **Each machine.** Install Syncthing from [syncthing.net/downloads](https://syncthing.net/downloads/),
-   add the server as a remote device on both sides using the device IDs (Actions > Show ID), and share
-   one folder, for example `~/Sync`, between the server and every machine. Let it finish its first sync.
-3. **cc-cost.** Run `cc-cost setup` on each machine. It finds the Syncthing folder and proposes
-   `~/Sync/cc-cost`; otherwise set it yourself with `cc-cost config set syncDir ~/Sync/cc-cost`.
-4. **Ignore list.** On every device, the server included, add an `.stignore` file in the root of the
-   shared folder with these two lines, so the per-machine dashboard and half-written snapshots never
-   travel. Syncthing does not sync `.stignore` itself, so each device needs its own:
+After each sync, cc-cost uploads this machine's `machines/<machine>.json` to the server and downloads the
+other machines' files into the local `syncDir`, then reports from there. The local folder stays the
+working copy: when the server can't be reached, `sync` prints one warning, reports from the copies it
+already has, and sends the file on the next run.
 
-   ```
-   dashboard.html
-   *.tmp
+1. **Key login.** The daily schedule and the Claude Code hook cannot type a password, so log in with a
+   key that has no passphrase, or one held by an agent that is running when the schedule fires.
+
+   ```bash
+   ssh-keygen -t ed25519                  # skip if you already have ~/.ssh/id_ed25519
+   ssh-copy-id pi@raspberrypi.local
    ```
 
-   Each machine rewrites its own `dashboard.html` on every sync, so nothing is lost; without this rule,
-   two machines writing it close together leave `dashboard.sync-conflict-*.html` copies.
+   Windows has no `ssh-copy-id`; in PowerShell:
+   `type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh pi@raspberrypi.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"`
 
-For a server you don't fully trust, such as a rented VPS, Syncthing's untrusted devices (still marked
-beta) keep only encrypted data on it: set an encryption password when sharing the folder with that
-device.
+2. **Point cc-cost at it** on every machine, with the same path:
 
-Syncthing runs whenever your machines are on, while cc-cost runs once a day and when a Claude Code
-session ends. A machine that was offline sends its file when it reconnects; a report may lag by that
-much.
+   ```bash
+   cc-cost config set remote pi@raspberrypi.local:cc-cost
+   ```
 
-A network share from the server (SMB or NFS) also works as `syncDir`, but only while it is mounted:
-away from home, or with the server off, `sync` fails. Syncthing keeps a local copy and catches up later.
+   The address takes one of two forms:
+
+   | Form | Example | Port |
+   |---|---|---|
+   | scp's `user@host:path` | `pi@raspberrypi.local:cc-cost` | 22 |
+   | a URL, `ssh://` or `scp://` | `ssh://pi@raspberrypi.local:2222/cc-cost` | the one given, else 22 |
+
+   The path is relative to the home folder on the server (`~/` is allowed); in a URL, a second `/`
+   after the port starts an absolute one: `ssh://pi@host:2222//srv/cc-cost`. The folder is created on
+   first use, and its name must not contain spaces. In the scp form only the first `:` separates the
+   server from the path, so `pi@host:2222:cc-cost` is refused rather than read as a folder named
+   `2222:cc-cost`.
+
+   A `Host` alias from `~/.ssh/config` also works as the host, with its port, user and key:
+
+   ```
+   Host pi
+     HostName raspberrypi.local
+     Port 2222
+     User pi
+   ```
+
+   With that, the address is `pi:cc-cost`, and `ssh pi` works by hand too.
+
+   `setup` offers it as "SSH server…" and tries the connection at once.
+   The first connection records the server's host key, the way `ssh` does with
+   `StrictHostKeyChecking=accept-new`; if that key changes later, cc-cost refuses to connect.
+3. Run `cc-cost`. It prints `exchanged with pi@raspberrypi.local:cc-cost`; `cc-cost status` shows the
+   server. To stop, `cc-cost config set remote ""`.
+
+`--offline` also skips the server. A remote can be combined with a cloud folder as `syncDir`, but one
+of the two is enough.
+
+A network share mounted from the server (SMB or NFS) also works as `syncDir`, without `remote`, but only
+while it is mounted: away from home, or with the server off, `sync` fails.
 
 ## Price overrides
 
@@ -121,4 +149,5 @@ file names or paths; a project is the name of its repository folder, or a hash o
 
 Reports make at most two network requests a day: the public pricing page, and the npm registry to see
 whether a newer cc-cost is out. Neither sends anything about your usage. `--offline` turns both off;
-`--json`, `--csv` and `--quiet` skip the version check.
+`--json`, `--csv` and `--quiet` skip the version check. With `remote` set, each sync also copies the
+snapshot files described above to and from your server over SSH; `--offline` skips that as well.
