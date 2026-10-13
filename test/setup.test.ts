@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { tempDir } from './tmp.ts';
-import { dataFolderIn, hookCommand, hookInstalled, installHook, isEphemeral, plistFor, removeHook, systemdUnits, windowsTaskScript } from '../src/setup.ts';
+import { dataFolderIn, hookCommand, hookInstalled, installHook, isEphemeral, plistFor, removeHook, syncthingFolders, systemdUnits, windowsTaskScript } from '../src/setup.ts';
 
 const runner = { node: 'C:\\Program Files\\nodejs\\node.exe', script: "C:\\Users\\o'brien\\cc-cost\\dist\\cli.js" };
 const tmp = () => tempDir('cc-cost-setup-');
@@ -64,4 +65,15 @@ test('temporary runners are recognized: npx, yarn dlx, pnpm dlx', () => {
     assert.ok(at('/home/me/.cache/pnpm/dlx/abc123/node_modules/@ugurcandede/cc-cost/dist/cli.js'));
     assert.ok(!at('/usr/local/lib/node_modules/@ugurcandede/cc-cost/dist/cli.js'));
     assert.ok(!at(String.raw`C:\Users\me\AppData\Roaming\npm\node_modules\@ugurcandede\cc-cost\dist\cli.js`));
+});
+
+test('Syncthing folders come from config.xml, ~ and entities resolved', () => {
+    const xml = `<configuration version="37">
+    <folder id="abcd-1234" label="Sync" path="~/Sync" type="sendreceive" rescanIntervalS="3600">
+        <device id="DEV"></device>
+    </folder>
+    <folder id="efgh-5678" label="A &amp; B" path="/srv/a &amp; b" type="sendreceive"></folder>
+    <device id="DEV" name="pi"></device>
+</configuration>`;
+    assert.deepEqual(syncthingFolders(xml), [os.homedir() + '/Sync', '/srv/a & b']);
 });

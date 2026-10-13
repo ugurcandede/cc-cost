@@ -30,9 +30,30 @@ function exists(p: string) {
     }
 }
 
+// Folder paths in a Syncthing config.xml, ~ meaning the home folder
+export function syncthingFolders(xml: string): string[] {
+    const unescape = (s: string) => s.replace(/&(lt|gt|quot|apos|amp);/g, (_, e: string) => ({ lt: '<', gt: '>', quot: '"', apos: "'", amp: '&' })[e]!);
+    return [...xml.matchAll(/<folder\b[^>]*?\spath="([^"]*)"/g)].map((m) => unescape(m[1]!).replace(/^~(?=$|[\\/])/, HOME));
+}
+
 // Sync-service folders on this machine, most likely first
 export function syncFolders(): string[] {
     const found: string[] = [];
+    // Syncthing first: unlike iCloud Drive or OneDrive it is never there by default, so it was set up on purpose.
+    // config.xml moved from the config to the state folder on Linux in Syncthing 1.27.
+    const syncthingConfigs = [
+        path.join(process.env.LOCALAPPDATA ?? '', 'Syncthing', 'config.xml'),
+        path.join(HOME, 'Library', 'Application Support', 'Syncthing', 'config.xml'),
+        path.join(process.env.XDG_STATE_HOME || path.join(HOME, '.local', 'state'), 'syncthing', 'config.xml'),
+        path.join(process.env.XDG_CONFIG_HOME || path.join(HOME, '.config'), 'syncthing', 'config.xml'),
+    ];
+    for (const f of syncthingConfigs) {
+        try {
+            found.push(...syncthingFolders(fs.readFileSync(f, 'utf8')));
+        } catch {
+            // no Syncthing, or not at this location
+        }
+    }
     // Dropbox records its folders (personal and business) in info.json
     const dropboxInfo = [
         path.join(process.env.LOCALAPPDATA ?? '', 'Dropbox', 'info.json'),

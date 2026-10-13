@@ -22,9 +22,11 @@ Command-line flags win over the file for a single run: `--sync-dir`, `--lang`, `
 ## The shared folder
 
 Any folder a sync service keeps identical on your machines works: Dropbox, iCloud Drive, OneDrive,
-Google Drive, Syncthing, a network share. `setup` looks for Dropbox (including business folders),
-OneDrive, iCloud Drive and Google Drive and proposes a `cc-cost` folder inside the first one found, or an
-existing `cc-cost` or `claude-cost` folder there.
+Google Drive, Syncthing, a network share. cc-cost only reads and writes files there; it never talks to
+the service. `setup` looks for Syncthing folders, Dropbox (including business folders), OneDrive, iCloud
+Drive and Google Drive, and proposes a `cc-cost` folder inside the first one found, or an existing
+`cc-cost` or `claude-cost` folder there. Syncthing comes first because it is never installed by default;
+to use another folder, answer `n` and type its path.
 
 Each machine writes only `machines/<machine>.json`, so the sync service never sees two writers on one
 file. `dashboard.html` is the exception: every machine rewrites it. If two do so at the same moment your
@@ -32,6 +34,45 @@ sync service may keep a "conflicted copy"; delete it.
 
 Machine names come from the hostname. If a hostname changes, a new file appears and the old one keeps
 counting; delete the old file if that machine is gone, or set `machine` to keep the old name.
+
+### Your own server: Raspberry Pi, home server, VPS
+
+To keep the data on a machine you own instead of a cloud service, sync the folder with
+[Syncthing](https://syncthing.net). It copies folders directly between your devices, encrypted, with no
+account. cc-cost does not run on the server; the server only holds a copy of the folder and is always on,
+so your machines exchange their files through it even when they are never online at the same time.
+
+1. **Server.** Install Syncthing (`sudo apt install syncthing` on Raspberry Pi OS and Debian) and run it
+   as a service of your user: `systemctl --user enable --now syncthing` and
+   `sudo loginctl enable-linger $USER`, so it keeps running after you log out. Its web interface listens
+   on `127.0.0.1:8384`; from another machine reach it through `ssh -L 8384:127.0.0.1:8384 pi@<server>`.
+2. **Each machine.** Install Syncthing from [syncthing.net/downloads](https://syncthing.net/downloads/),
+   add the server as a remote device on both sides using the device IDs (Actions > Show ID), and share
+   one folder, for example `~/Sync`, between the server and every machine. Let it finish its first sync.
+3. **cc-cost.** Run `cc-cost setup` on each machine. It finds the Syncthing folder and proposes
+   `~/Sync/cc-cost`; otherwise set it yourself with `cc-cost config set syncDir ~/Sync/cc-cost`.
+4. **Ignore list.** On every device, the server included, add an `.stignore` file in the root of the
+   shared folder with these two lines, so the per-machine dashboard and half-written snapshots never
+   travel. Syncthing does not sync `.stignore` itself, so each device needs its own:
+
+   ```
+   dashboard.html
+   *.tmp
+   ```
+
+   Each machine rewrites its own `dashboard.html` on every sync, so nothing is lost; without this rule,
+   two machines writing it close together leave `dashboard.sync-conflict-*.html` copies.
+
+For a server you don't fully trust, such as a rented VPS, Syncthing's untrusted devices (still marked
+beta) keep only encrypted data on it: set an encryption password when sharing the folder with that
+device.
+
+Syncthing runs whenever your machines are on, while cc-cost runs once a day and when a Claude Code
+session ends. A machine that was offline sends its file when it reconnects; a report may lag by that
+much.
+
+A network share from the server (SMB or NFS) also works as `syncDir`, but only while it is mounted:
+away from home, or with the server off, `sync` fails. Syncthing keeps a local copy and catches up later.
 
 ## Price overrides
 

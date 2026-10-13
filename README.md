@@ -27,7 +27,7 @@
 ```bash
 npm i -g @ugurcandede/cc-cost          # or, with Yarn 1: yarn global add @ugurcandede/cc-cost
 
-# Pick the folder your machines share (Dropbox, iCloud Drive, OneDrive, …),
+# Pick the folder your machines share (Dropbox, iCloud Drive, OneDrive, Syncthing, …),
 # your language and plan; schedule a daily sync and add the Claude Code hook.
 cc-cost setup
 
@@ -36,7 +36,8 @@ cc-cost report           # open the dashboard
 ```
 
 Run `setup` on every machine and point them at the same folder. Each one adds its numbers; every one
-sees the total.
+sees the total. No cloud account? Keep the folder on a Raspberry Pi or your own server with Syncthing:
+see [the shared folder](docs/configuration.md#your-own-server-raspberry-pi-home-server-vps).
 
 Yarn 2 and later have no global installs: install with npm, or try a report once with
 `yarn dlx @ugurcandede/cc-cost` (or `npx @ugurcandede/cc-cost`). `setup` needs a permanent install,
