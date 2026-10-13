@@ -39,6 +39,7 @@ interface Call {
     effort?: string;
     entrypoint?: string;
     background: boolean;
+    account?: string;
 }
 
 const zeros = () => new Array<number>(T_LEN).fill(0);
@@ -117,15 +118,20 @@ function addUsage(t: number[], u: Usage) {
     t[T.ctx50k + (bucket < 0 ? CTX_BOUNDS.length : bucket)]! += 1;
 }
 
-export async function scan(dirs: string[], opts: { timezone: string; anonymize: boolean }): Promise<ScanResult> {
-    const files: string[] = [];
-    for (const dir of dirs) listJsonl(path.join(dir, 'projects'), files);
+// accounts maps each Claude Code folder to the id of the account logged in there (accounts.ts)
+export async function scan(dirs: string[], opts: { timezone: string; anonymize: boolean; accounts?: Record<string, string> }): Promise<ScanResult> {
+    const files: { file: string; account?: string }[] = [];
+    for (const dir of dirs) {
+        const found: string[] = [];
+        listJsonl(path.join(dir, 'projects'), found);
+        for (const file of found) files.push({ file, account: opts.accounts?.[dir] });
+    }
 
     const calls = new Map<string, Call>();
     const limits = new Map<string, LimitEvent>();
     let duplicates = 0;
 
-    for (const file of files) {
+    for (const { file, account } of files) {
         const rl = readline.createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity });
         try {
             for await (const line of rl) {
@@ -139,10 +145,10 @@ export async function scan(dirs: string[], opts: { timezone: string; anonymize: 
                 const q = d.quotaLimits;
                 if (q && d.timestamp) {
                     // Retries inside one limit period share resetsAt; keep the first hit of each period.
-                    const key = `${q.rateLimitType}|${q.status}|${q.resetsAt ?? d.timestamp}`;
+                    const key = `${account}|${q.rateLimitType}|${q.status}|${q.resetsAt ?? d.timestamp}`;
                     const seen = limits.get(key);
                     if (!seen || d.timestamp < seen.ts)
-                        limits.set(key, { ts: d.timestamp, type: String(q.rateLimitType), status: String(q.status), ...(typeof q.resetsAt === 'number' && { resetsAt: q.resetsAt }) });
+                        limits.set(key, defined({ ts: d.timestamp, type: String(q.rateLimitType), status: String(q.status), resetsAt: typeof q.resetsAt === 'number' ? q.resetsAt : undefined, ac: account }));
                 }
 
                 const msg = d.message;
@@ -166,6 +172,7 @@ export async function scan(dirs: string[], opts: { timezone: string; anonymize: 
                     effort: d.effort,
                     entrypoint: d.entrypoint,
                     background: d.sessionKind === 'bg',
+                    account,
                 });
             }
         } catch (e) {
@@ -193,17 +200,18 @@ export async function scan(dirs: string[], opts: { timezone: string; anonymize: 
         const { d, h } = at(c.ts);
         const m = normModel(c.model), f = c.usage.speed === 'fast' ? (1 as const) : undefined, p = project(c.cwd);
         const bg = c.background ? (1 as const) : undefined;
-        const rowKey = [d, p, c.session, m, f, c.agent, c.skill, c.mcp, c.effort, c.entrypoint, bg].join('\0');
+        const ac = c.account;
+        const rowKey = [d, p, c.session, m, f, c.agent, c.skill, c.mcp, c.effort, c.entrypoint, bg, ac].join('\0');
         let row = rows.get(rowKey);
         if (!row) {
-            row = defined({ d, p, s: c.session, m, f, a: c.agent, k: c.skill, x: c.mcp, e: c.effort, ep: c.entrypoint, bg, t: zeros() });
+            row = defined({ d, p, s: c.session, m, f, a: c.agent, k: c.skill, x: c.mcp, e: c.effort, ep: c.entrypoint, bg, ac, t: zeros() });
             rows.set(rowKey, row);
         }
         addUsage(row.t, c.usage);
 
-        const hourKey = `${d}|${h}|${m}|${f}`;
+        const hourKey = `${d}|${h}|${m}|${f}|${ac}`;
         let hr = hourly.get(hourKey);
-        if (!hr) hourly.set(hourKey, (hr = defined({ d, h, m, f, t: zeros() })));
+        if (!hr) hourly.set(hourKey, (hr = defined({ d, h, m, f, ac, t: zeros() })));
         addUsage(hr.t, c.usage);
 
         const s = (sessions[c.session] ??= { p, first: c.ts, last: c.ts });

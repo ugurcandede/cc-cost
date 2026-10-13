@@ -34,6 +34,7 @@ export interface Row {
     e?: string; // effort level
     ep?: string; // entrypoint (cli, sdk-cli, ...)
     bg?: 1; // background session
+    ac?: string; // account (see accounts.ts); absent on rows synced before accounts were told apart
     t: number[];
 }
 
@@ -42,6 +43,7 @@ export interface HourRow {
     h: number; // local hour 0-23
     m: string;
     f?: 1;
+    ac?: string;
     t: number[];
 }
 
@@ -56,6 +58,16 @@ export interface LimitEvent {
     type: string; // five_hour, seven_day, ...
     status: string; // rejected, allowed_warning, ...
     resetsAt?: number; // epoch seconds; identifies the limit period, so retries within it count once
+    ac?: string; // limits belong to an account's subscription
+}
+
+// What a machine knows about an account it reads; every machine writes it for its own accounts, so
+// reports on any machine can name them and price their plans.
+export interface AccountMeta {
+    name?: string; // given by the user
+    plan?: string; // key of PLANS, or "free" for a sponsored seat
+    price?: number; // $ a month, instead of the plan's list price
+    folder?: string; // the Claude Code folder's name, the label when no name was given
 }
 
 export interface Snapshot {
@@ -67,6 +79,8 @@ export interface Snapshot {
     hourly: HourRow[];
     sessions: Record<string, SessionMeta>;
     limits: LimitEvent[];
+    accounts?: Record<string, AccountMeta>; // by account id
+    unassigned?: string; // the account this machine's rows without one belong to, as the user chose
 }
 
 export const UNKNOWN = '(unknown)';

@@ -1,22 +1,48 @@
 import { priceFor, type Price, type PriceTable } from './pricing.ts';
-import { T, T_LEN, type HourRow, type LimitEvent, type Row, type Snapshot } from './types.ts';
+import { T, T_LEN, UNKNOWN, type AccountMeta, type HourRow, type LimitEvent, type Row, type Snapshot } from './types.ts';
 
 // $ per part: input, cache write, cache read, output, web search
 export type Cost = [number, number, number, number, number];
 
-export interface PricedRow extends Row {
+// account: the account id, or UNKNOWN for rows from before accounts were told apart that the user has
+// not given to one; accountName: what reports show for it
+interface Owned {
     machine: string;
+    account: string;
+    accountName: string;
+}
+
+export interface PricedRow extends Row, Owned {
     c: Cost;
     cost: number;
 }
 
-export interface PricedHour extends HourRow {
-    machine: string;
+export interface PricedHour extends HourRow, Owned {
     cost: number;
 }
 
-export interface MachineLimit extends LimitEvent {
-    machine: string;
+export interface MachineLimit extends LimitEvent, Owned {}
+
+// An account as reports see it: what the machines that read it say about it, and which machines those are
+export interface Account extends AccountMeta {
+    id: string;
+    label: string;
+    machines: string[];
+}
+
+export const accountLabel = (id: string, meta?: AccountMeta) =>
+    id === UNKNOWN ? UNKNOWN : meta?.name || meta?.folder?.replace(/^\./, '') || id;
+
+// Every snapshot's account notes, the most recently updated machine winning where two disagree
+export function accountsOf(snaps: Snapshot[]): Map<string, Account> {
+    const out = new Map<string, Account>();
+    for (const snap of [...snaps].sort((a, b) => a.updated.localeCompare(b.updated)))
+        for (const [id, meta] of Object.entries(snap.accounts ?? {})) {
+            const seen = out.get(id);
+            const merged = { ...seen, ...meta };
+            out.set(id, { ...merged, id, label: accountLabel(id, merged), machines: [...new Set([...(seen?.machines ?? []), snap.machine])] });
+        }
+    return out;
 }
 
 export const modelLabel = (r: { m: string; f?: 1 }) => (r.f ? `${r.m}-fast` : r.m);
@@ -41,7 +67,13 @@ export function priceRows(snaps: Snapshot[], table: PriceTable, overrides: Recor
     const hours: PricedHour[] = [];
     const limits: MachineLimit[] = [];
     const unknown = new Set<string>();
+    const accounts = accountsOf(snaps);
     for (const snap of snaps) {
+        // Rows without an account belong to the one this machine's user chose for them, if any
+        const owner = (ac?: string) => {
+            const account = ac ?? snap.unassigned ?? UNKNOWN;
+            return { machine: snap.machine, account, accountName: accounts.get(account)?.label ?? accountLabel(account) };
+        };
         for (const r of snap.rows) {
             const p = priceFor(table, r.m, !!r.f, overrides);
             if (!p) {
@@ -49,15 +81,15 @@ export function priceRows(snaps: Snapshot[], table: PriceTable, overrides: Recor
                 continue;
             }
             const c = costOf(r.t, p, table.webSearch);
-            rows.push({ ...r, machine: snap.machine, c, cost: sum(c) });
+            rows.push({ ...r, ...owner(r.ac), c, cost: sum(c) });
         }
         for (const h of snap.hourly) {
             const p = priceFor(table, h.m, !!h.f, overrides);
-            if (p) hours.push({ ...h, machine: snap.machine, cost: sum(costOf(h.t, p, table.webSearch)) });
+            if (p) hours.push({ ...h, ...owner(h.ac), cost: sum(costOf(h.t, p, table.webSearch)) });
         }
-        for (const l of snap.limits) limits.push({ ...l, machine: snap.machine });
+        for (const l of snap.limits) limits.push({ ...l, ...owner(l.ac) });
     }
-    return { rows, hours, limits, unknown };
+    return { rows, hours, limits, unknown, accounts };
 }
 
 // What the same tokens would cost on another model at standard speed
@@ -70,6 +102,7 @@ export interface Filter {
     since?: string;
     until?: string;
     machine?: string[];
+    account?: string[];
     project?: string[];
     model?: string[];
     session?: string[];
@@ -88,6 +121,7 @@ export function applyFilter(rows: PricedRow[], f: Filter): PricedRow[] {
             (!f.since || r.d >= f.since) &&
             (!f.until || r.d <= f.until) &&
             matches(f.machine, r.machine) &&
+            matches(f.account, r.accountName) &&
             matches(f.project, r.p) &&
             matches(f.model, modelLabel(r)) &&
             (!f.session?.length || f.session.some((s) => r.s.startsWith(s))) &&
@@ -102,7 +136,12 @@ export const hourFilterable = (f: Filter) => !f.project?.length && !f.session?.l
 
 export function applyHourFilter(hours: PricedHour[], f: Filter): PricedHour[] {
     return hours.filter(
-        (h) => (!f.since || h.d >= f.since) && (!f.until || h.d <= f.until) && matches(f.machine, h.machine) && matches(f.model, modelLabel(h)),
+        (h) =>
+            (!f.since || h.d >= f.since) &&
+            (!f.until || h.d <= f.until) &&
+            matches(f.machine, h.machine) &&
+            matches(f.account, h.accountName) &&
+            matches(f.model, modelLabel(h)),
     );
 }
 

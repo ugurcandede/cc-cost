@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { localClock, type ScanResult } from './scan.ts';
-import { T_LEN, UNKNOWN, type LimitEvent, type Snapshot } from './types.ts';
+import { T_LEN, UNKNOWN, type AccountMeta, type LimitEvent, type Snapshot } from './types.ts';
 
 // One file per machine: each machine only writes its own, so a sync service never sees two
 // writers on the same file and can't produce conflicted copies.
@@ -71,7 +71,14 @@ export function loadOwn(syncDir: string, machine: string, timezone: string): Sna
 // A scanned day replaces the stored one only when all of its transcripts must still be on disk,
 // i.e. it is newer than `safeFrom`. Older scanned days can be partial (short sessions of that day
 // already cleaned up, a long session reaching into it still there), so they only fill gaps.
-export function merge(prev: Snapshot, scan: ScanResult, safeFrom: string, meta: { machine: string; timezone: string }): Snapshot {
+// meta.accounts describes the accounts read now; ones read before keep their entry, since archived rows
+// still point at them.
+export function merge(
+    prev: Snapshot,
+    scan: ScanResult,
+    safeFrom: string,
+    meta: { machine: string; timezone: string; accounts?: Record<string, AccountMeta>; unassigned?: string },
+): Snapshot {
     const stored = new Set(prev.rows.map((r) => r.d));
     const take = new Set([...scan.rows, ...scan.hourly].map((r) => r.d).filter((d) => d >= safeFrom || !stored.has(d)));
 
@@ -84,7 +91,7 @@ export function merge(prev: Snapshot, scan: ScanResult, safeFrom: string, meta: 
     // Like rows, a replaced day's limit events come from the scan only.
     const day = localClock(meta.timezone);
     for (const l of [...prev.limits.filter((x) => !take.has(day(x.ts).d)), ...scan.limits]) {
-        const key = `${l.type}|${l.status}|${l.resetsAt ?? l.ts}`;
+        const key = `${l.ac}|${l.type}|${l.status}|${l.resetsAt ?? l.ts}`;
         const seen = limits.get(key);
         if (!seen || l.ts < seen.ts) limits.set(key, l);
     }
@@ -98,6 +105,8 @@ export function merge(prev: Snapshot, scan: ScanResult, safeFrom: string, meta: 
         hourly: [...prev.hourly.filter((r) => !take.has(r.d)), ...scan.hourly.filter((r) => take.has(r.d))],
         sessions,
         limits: [...limits.values()].sort((a, b) => a.ts.localeCompare(b.ts)),
+        ...(meta.accounts || prev.accounts ? { accounts: { ...prev.accounts, ...meta.accounts } } : {}),
+        ...(meta.unassigned ? { unassigned: meta.unassigned } : {}),
     };
 }
 

@@ -78,6 +78,8 @@ const resolveSettings = (): Settings => ({
     pricing: config.pricing ?? {},
     claudeDirs: claudeDirs(config.claudeDirs),
     remote: opt.offline ? undefined : config.remote || undefined,
+    accounts: config.accounts,
+    unassigned: config.unassigned,
 });
 let settings = resolveSettings();
 setLang(settings.lang);
