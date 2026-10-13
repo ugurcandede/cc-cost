@@ -20,6 +20,7 @@ import {
 import { probe, remoteParts, remoteProblem, sshFailure } from './remote.ts';
 import { Cancelled, checklist, input, select, track, type Choice } from './prompt.ts';
 import { localClock } from './scan.ts';
+import { UNKNOWN } from './types.ts';
 import {
     claudeSettingsFiles, currentRunner, dataFolderIn, hookInstalled, installHook, installSchedule, isEphemeral, removeHook,
     removeSchedule, SCHEDULE_TIME, scheduleInstalled, syncFolders, type SyncFolder,
@@ -159,6 +160,13 @@ function dashboard(d: Data) {
         lang: settings.lang,
         timezone: settings.timezone,
         planPrice: settings.planPrice,
+        accounts: Object.fromEntries([...new Set(d.rows.map((r) => r.account))].map((id) => {
+            const a = d.accounts.get(id);
+            // usage from before accounts falls back to the plan setting, as in the plan report
+            const plan = a?.plan ?? (id === UNKNOWN ? config.plan : undefined);
+            const name = a?.label ?? d.rows.find((r) => r.account === id)!.accountName;
+            return [name, { plan: plan === 'free' ? L().setup.sponsored : plan && (PLAN_NAMES[plan] ?? plan), price: planPrice(plan, a?.price) }];
+        })),
         updated: new Date().toISOString(),
         machines: d.snaps.length,
         first: dates[0] ?? '',

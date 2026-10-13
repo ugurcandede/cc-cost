@@ -19,6 +19,9 @@ export interface DashboardMeta {
     lang: string;
     timezone: string;
     planPrice: number;
+    // by the name an account is shown under: the plan's name and its price a month; a price of 0 is a
+    // sponsored seat, none an account without a known plan. Both stay out of the plan multiple.
+    accounts: Record<string, { plan?: string; price?: number }>;
     updated: string; // ISO
     machines: number;
     first: string;
@@ -78,25 +81,26 @@ function dictionary() {
 // Row layout shared with the page script below (R.* indices)
 function encode(rows: PricedRow[], limits: MachineLimit[], timezone: string) {
     const dates = dictionary(), machines = dictionary(), models = dictionary(), projects = dictionary(), sessions = dictionary();
-    const agents = dictionary(), skills = dictionary(), mcps = dictionary();
-    const key = (r: PricedRow) => [r.d, r.machine, modelLabel(r), r.p, r.s, agentOf(r), r.k ?? '', r.x ?? ''].join('\0');
+    const agents = dictionary(), skills = dictionary(), mcps = dictionary(), accounts = dictionary();
+    const key = (r: PricedRow) => [r.d, r.machine, modelLabel(r), r.p, r.s, agentOf(r), r.k ?? '', r.x ?? '', r.accountName].join('\0');
     const encoded = [...groupBy(rows, key)].map(([k, t]) => {
-        const [d, machine, model, p, s, a, sk, x] = k.split('\0') as string[];
+        const [d, machine, model, p, s, a, sk, x, ac] = k.split('\0') as string[];
         const n = (i: number) => t.t[i] ?? 0;
         return [
             dates.id(d!), machines.id(machine!), models.id(model!), projects.id(p!), sessions.id(s!), agents.id(a!), skills.id(sk!), mcps.id(x!),
             n(T.calls), r4(t.cost), r4(t.c[0]), r4(t.c[1]), r4(t.c[2]), r4(t.c[3]), r4(t.c[4]),
             contextTokens(t.t), n(T.read), n(T.output), n(T.maxContext), n(T.ctx50k), n(T.ctx200k), n(T.ctx500k), n(T.ctxOver500k),
+            accounts.id(ac!),
         ];
     });
     const clock = localClock(timezone);
     const hits = limits.filter((l) => l.status === 'rejected').map((l) => {
         const k = clock(l.ts);
-        return [k.d, `${String(k.h).padStart(2, '0')}:${String(k.min).padStart(2, '0')}`, l.machine, l.type];
+        return [k.d, `${String(k.h).padStart(2, '0')}:${String(k.min).padStart(2, '0')}`, l.machine, l.type, l.accountName];
     });
     return {
         dates: dates.values, machines: machines.values, models: models.values, projects: projects.values, sessions: sessions.values,
-        agents: agents.values, skills: skills.values, mcps: mcps.values, rows: encoded, hits,
+        agents: agents.values, skills: skills.values, mcps: mcps.values, accounts: accounts.values, rows: encoded, hits,
     };
 }
 
@@ -270,6 +274,7 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 </div>
 <div class="filters last">
   <select id="fMachine" aria-label="${esc(D.machine)}" data-t-aria="machine"></select>
+  <select id="fAccount" aria-label="${esc(D.account)}" data-t-aria="account" hidden></select>
   <select id="fProject" aria-label="${esc(D.project)}" data-t-aria="project"></select>
   <select id="fModel" aria-label="${esc(D.model)}" data-t-aria="model"></select>
   <span class="fsep"></span>
@@ -278,6 +283,7 @@ svg{display:block;width:100%;height:auto;overflow:visible}
     <option value="model" ${text('byModelOpt')}</option>
     <option value="project" ${text('byProjectOpt')}</option>
     <option value="machine" ${text('byMachineOpt')}</option>
+    <option value="account" id="byAccount" hidden ${text('byAccountOpt')}</option>
   </select>
 </div>
 
@@ -350,13 +356,16 @@ const THEMES = ${js(Object.fromEntries(THEMES.map(([t, icon, key]) => [t, [ICON[
 const UNKNOWN = ${js(UNKNOWN)};
 // Row layout, same order as encode() in dashboard.ts
 const R = { d: 0, machine: 1, model: 2, project: 3, session: 4, agent: 5, skill: 6, mcp: 7, calls: 8, cost: 9,
-  ci: 10, cw: 11, cr: 12, co: 13, cx: 14, ctx: 15, read: 16, out: 17, maxCtx: 18, b0: 19 };
+  ci: 10, cw: 11, cr: 12, co: 13, cx: 14, ctx: 15, read: 16, out: 17, maxCtx: 18, b0: 19, account: 23 };
 const ROWS = DATA.rows.map(r => ({
   d: DATA.dates[r[R.d]], machine: DATA.machines[r[R.machine]], model: DATA.models[r[R.model]], project: DATA.projects[r[R.project]],
   session: DATA.sessions[r[R.session]], agent: DATA.agents[r[R.agent]], skill: DATA.skills[r[R.skill]], mcp: DATA.mcps[r[R.mcp]],
   calls: r[R.calls], c: r[R.cost], ci: r[R.ci], cw: r[R.cw], cr: r[R.cr], co: r[R.co], cx: r[R.cx],
-  ctx: r[R.ctx], read: r[R.read], out: r[R.out], maxCtx: r[R.maxCtx], b: r.slice(R.b0, R.b0 + 4)
+  ctx: r[R.ctx], read: r[R.read], out: r[R.out], maxCtx: r[R.maxCtx], b: r.slice(R.b0, R.b0 + 4),
+  account: DATA.accounts[r[R.account]]
 }));
+// The account filter and chart option only mean something with more than one account
+const SEVERAL_ACCOUNTS = DATA.accounts.length > 1;
 
 let lang = META.lang;
 try { const saved = localStorage.getItem('cc-cost-lang'); if (saved && STRINGS[saved]) lang = saved; } catch (e) {}
@@ -382,7 +391,7 @@ const MIN = ALL[0] || iso(Date.now()), MAX = ALL[ALL.length - 1] || iso(Date.now
 
 let days = 30;        // preset: 1 = today, -1 = yesterday, 0 = all
 let custom = null;    // {from, to}; overrides the preset while set
-const sel = { machine: '', project: '', model: '' };
+const sel = { machine: '', account: '', project: '', model: '' };
 let groupBy = 'model';
 
 // Calendar days: "last 7 days" means the last 7 calendar days, not the last 7 days with data
@@ -396,7 +405,8 @@ function bounds() {
 function slice() {
   const b = bounds();
   return ROWS.filter(r => r.d >= b.from && r.d <= b.to &&
-    (!sel.machine || r.machine === sel.machine) && (!sel.project || r.project === sel.project) && (!sel.model || r.model === sel.model));
+    (!sel.machine || r.machine === sel.machine) && (!sel.account || r.account === sel.account) &&
+    (!sel.project || r.project === sel.project) && (!sel.model || r.model === sel.model));
 }
 
 // The plan multiple is per calendar month, so divide by calendar days, not active days
@@ -437,7 +447,7 @@ function series(rs) {
     const list = [...ORDER.filter(m => present.has(m)), ...[...present].filter(m => !ORDER.includes(m)).sort()];
     return { key: r => r.model, list, hue: modelHue, label: m => m };
   }
-  const key = groupBy === 'project' ? (r => r.project) : (r => r.machine);
+  const key = groupBy === 'project' ? (r => r.project) : groupBy === 'account' ? (r => r.account) : (r => r.machine);
   const ranked = sumBy(rs, key).map(e => e[0]);
   const top = ranked.slice(0, 7);
   const list = ranked.length > 7 ? [...top, OTHER] : top;
@@ -463,6 +473,9 @@ function applyText() {
   document.getElementById('note').textContent = fill(L.note, { updated, machines: META.machines, min: META.first || '–', max: META.last || '–', prices: META.prices });
   document.getElementById('footText').textContent = fill(L.footer, { version: META.version });
   fillSelect('fMachine', DATA.machines, L.allMachines, sel.machine);
+  fillSelect('fAccount', DATA.accounts, L.allAccounts, sel.account);
+  document.getElementById('fAccount').hidden = !SEVERAL_ACCOUNTS;
+  document.getElementById('byAccount').hidden = !SEVERAL_ACCOUNTS;
   fillSelect('fProject', DATA.projects, L.allProjects, sel.project);
   fillSelect('fModel', DATA.models, L.allModels, sel.model);
 }
@@ -482,9 +495,21 @@ function render() {
   const span = calendarSpan(dates);
   document.getElementById('tAvg').textContent = active ? $$(total / active) : '–';
   document.getElementById('tAvgN').textContent = fill(L.activeDays, { n: active });
-  document.getElementById('tMultL').textContent = fill(L.planMultiple, { price: '$' + META.planPrice });
-  document.getElementById('tMult').textContent = active ? (total / (META.planPrice * span / 30)).toFixed(1) + '×' : '–';
-  document.getElementById('tMultN').textContent = active ? fill(L.normalized, { n: span }) : '';
+  // Against the plans of the accounts in view that are paid for; a sponsored seat or one without a known
+  // plan shows its cost everywhere else but stays out of this ratio
+  const inView = [...new Set(rs.map(r => r.account))];
+  const paid = inView.filter(a => META.accounts[a] && META.accounts[a].price > 0);
+  const left = inView.filter(a => !paid.includes(a));
+  const price = paid.reduce((s, a) => s + META.accounts[a].price, 0);
+  const paidRows = rs.filter(r => paid.includes(r.account));
+  const paidCost = paidRows.reduce((s, r) => s + r.c, 0);
+  // over the days the paid accounts were in use, so an account added later is not diluted by days before it
+  const paidSpan = calendarSpan([...new Set(paidRows.map(r => r.d))].sort());
+  const plans = [...new Set(paid.map(a => META.accounts[a].plan || a))].join(' + ');
+  document.getElementById('tMultL').textContent = price ? fill(L.planMultipleOf, { plans, price: '$' + price }) : L.noPaidPlan;
+  document.getElementById('tMult').textContent = active && price ? (paidCost / (price * paidSpan / 30)).toFixed(1) + '×' : '–';
+  document.getElementById('tMultN').textContent = !active ? '' :
+    [fill(L.normalized, { n: price ? paidSpan : span }), ...(left.length ? [fill(L.leftOut, { names: left.join(', ') })] : [])].join(' · ');
   document.getElementById('tCalls').textContent = NF.format(calls);
   document.getElementById('tCallsN').textContent = fill(L.perCall, { cost: $$(total / (calls || 1)) });
   document.getElementById('tHit').textContent = ctx ? pct(read, ctx) : '–';
@@ -703,12 +728,12 @@ function drawLimits() {
   const host = document.getElementById('limits');
   host.textContent = '';
   const b = bounds();
-  const hits = DATA.hits.filter(h => h[0] >= b.from && h[0] <= b.to && (!sel.machine || h[2] === sel.machine));
+  const hits = DATA.hits.filter(h => h[0] >= b.from && h[0] <= b.to && (!sel.machine || h[2] === sel.machine) && (!sel.account || h[4] === sel.account));
   if (!hits.length) { const p = document.createElement('p'); p.className = 'empty'; p.textContent = L.limitsNone; host.append(p); return; }
   const t = document.createElement('table');
   for (const h of hits.slice(-10).reverse()) {
     const tr = document.createElement('tr');
-    for (const v of [h[0] + ' ' + h[1], h[2], h[3]]) { const td = document.createElement('td'); td.textContent = v; tr.append(td); }
+    for (const v of [h[0] + ' ' + h[1], h[2], ...(SEVERAL_ACCOUNTS ? [h[4]] : []), h[3]]) { const td = document.createElement('td'); td.textContent = v; tr.append(td); }
     t.append(tr);
   }
   host.append(t);
@@ -750,7 +775,7 @@ for (const i of [FROM, TO]) {
 }
 document.getElementById('reset').addEventListener('click', () => { custom = null; days = 30; syncInputs(); render(); });
 
-for (const [id, key] of [['fMachine', 'machine'], ['fProject', 'project'], ['fModel', 'model']]) {
+for (const [id, key] of [['fMachine', 'machine'], ['fAccount', 'account'], ['fProject', 'project'], ['fModel', 'model']]) {
   const s = document.getElementById(id);
   s.addEventListener('change', () => { sel[key] = s.value; s.classList.toggle('on', !!s.value); render(); });
 }
