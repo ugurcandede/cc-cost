@@ -35,6 +35,12 @@ const ICON = {
     logo: `<svg viewBox="0 0 120 120" aria-hidden="true"><rect width="120" height="120" rx="28" fill="#D97757"/><path fill="#fff" d="M40 24H80Q86 24 86 30V96L81.67 91L77.33 96L73 91L68.67 96L64.33 91L60 96L55.67 91L51.33 96L47 91L42.67 96L38.33 91L34 96V30Q34 24 40 24Z"/><rect x="42" y="62" width="8" height="18" rx="2" fill="#D97757"/><rect x="56" y="50" width="8" height="30" rx="2" fill="#D97757"/><rect x="70" y="36" width="8" height="44" rx="2" fill="#D97757"/></svg>`,
     github: `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>`,
     npm: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z"/></svg>`,
+    check: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`,
+    // theme menu: system, light, dark
+    // half light, half dark: the page follows whichever the system uses
+    system: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>`,
+    sun: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`,
+    moon: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>`,
     globe: `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/></svg>`,
 };
 // Header logo as the tab icon; a standalone SVG needs xmlns
@@ -42,6 +48,19 @@ const FAVICON = 'data:image/svg+xml,' + encodeURIComponent(ICON.logo.replace('<s
 // The same logo as a 180px PNG, for browsers without SVG favicons (Safari) and as the touch icon.
 // Redraw it if the logo changes.
 const FAVICON_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAAFd0lEQVR42u3cv4obRxwH8H0EPYIeQY+gR7hu28V1+m1Vpkjjxq2IyzRXBNJeipQBVS6W4HBNHHDhI0UcEwgKE+ZAOe5O/08zv/384IuJJZ3tmU+W387MqmkKqKFvp0PfXg19uxj6djn07c3Qt6uhb9dSZFZ5jpZ5ztLcTZuxVgbcDX17PfTtHSBhcpfntAsPfOjbSf6HuvKO60qe5nwS7Wq8NLmjz7Lqq/bQt/PcZ5lM2UwyMXdFFlfsC2BeuMmTPW8iFyVCnrnZkyNvHmelYO5cleVEV+vu0pj1ynLy3vpSa8pWMOScKyGTl8SsX5aX6KsnMAvUMMvoUOuZ5ZI9tdUMsfrxzDqzAZUS0p1iB9CmiZS0+TI7BrSbQCnuJvGYg0YGUErMYl/MU62GFN56TK1qyPhWPfKTJgZMasjcBoqMZ8Ml984GSmrKVO8s8XvpfPjIAEmNmdjilthb4nYFJczuoZtBCXVzqN2QUG1H/sZIgyI153oTtHMbUv35Dv2zxOuj87evGwyJkCvnniXWOenI2923r/v1p59+WH9+/2499kpjkMYijUnobfCIp+t+WbyCeAvuNEYhT99F2yFME/Xlwy21WyqNUUDUqyba/6WuzPtdqaPNfxOtZ1b7VbSeOhTodNOj9qs0ZkBrN7QdQJ8/6rACGmiggQYaaKCBBhpoBTTQQAMNNNBAAw000EADDbQCGmiggQb6Berj998+e345vZbeAzTQVWDedQwOQQ000C9a+zxZkt4LNNChelyggQYaaKCBBhpooIEGGmiggQYaaKCBBhpooIEGGmiggQYaaKCBBhpooIEGGmiggQYaaKCBBhpooIEGGmigo4E+9QOtQAN9UcynfqAVaKAvVud4oBVooEP1u0ADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQJ8MdA1PlwANdKinS4AGOtTTJUADHQof0EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAn/Wp71p+JtC+lyPUzwTaNyeF+5lA+267kAU00EADDTTQQAMNNNAKaKCBBhpooIEGGmiggQYaaAU00EADDTTQQAMNNNBAAw20AhpooIEuF/Tfnz7uPclj+gzQFYH+4+cf/3st/bprje0zQFcC+vP7d/97/cuH262Tn95z7GfSn7utSvq7AV0B6DSRD5/BS//9HIKxfgbowkH/89ef61+//urR96TfT68/rDF/JhroVSTQaaJuX/fPvi+9vjmhY/9MINCrBPomEujf3n6z03vT++7r9+/e7PSZ9L77OuTPKfXvFgj0TQK9jPIP2nXyN9/vM28igV4m0ItIPZSMOosE+spASJBcJdBTAyFBMm1SDX17ZzCk8tw19zX07bUBkcpzvQm6MyBSebpN0PpoidE/b6BeGRSpdofwYWk7JES7sQF6YmCk0kyaxyrSNriMJsvmqXJzKNXfDD6C+sYgSTWn67bV0LdzAyWVZN7sUnppqbp3fqKXdr5Dij23sbV3fgS1c9JS7rnnQ8ruoVSxK7gH6JnWQwprNWbNMWVLXIre4j4QtVUPqWdVY0fUNlyk3A2UA0BP3CTKJW4Cnzx8BLXADLVExfwAtZ5aztYzvxhmqx9S1WrGgevUNl/kFJsmXVNC5R1FfbUc0y/PmtIqH2hytZZ9rsqLpuTKR0/11rK1V977COiFYc+thMgTKxjzptZyxZYqr8g7rl13bh5Hd7PXXWRN+QJX7S5/66mbyFg3edd5bqfNWCsDv8qrJMvcZ7mSl33lvclztchzVwTgfwGuCy77dqbizQAAAABJRU5ErkJggg==';
+
+// Dark palette. It applies when the system is dark and the viewer has not picked Light, or when the
+// viewer picks Dark; the page sets data-theme on <html> for a picked theme and removes it for System.
+const DARK = `
+  color-scheme:dark;
+  --plane:#0d0d0d; --surface:#1a1a19;
+  --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10); --shadow:rgba(0,0,0,.5);
+  --hue-1:#3987e5;--hue-2:#d95926;--hue-3:#199e70;--hue-4:#c98500;
+  --hue-5:#d55181;--hue-6:#008300;--hue-7:#9085e9;--hue-8:#e66767;`;
+
+// The theme menu's entries: mode, icon, label
+const THEMES = [['system', 'system', 'themeSystem'], ['light', 'sun', 'themeLight'], ['dark', 'moon', 'themeDark']] as const;
 
 // Strings repeat across thousands of rows; store each once and refer to it by index.
 function dictionary() {
@@ -94,23 +113,20 @@ export function writeDashboard(d: { rows: PricedRow[]; limits: MachineLimit[] },
 <link rel="icon" type="image/png" sizes="180x180" href="${FAVICON_PNG}">
 <link rel="icon" type="image/svg+xml" href="${FAVICON}">
 <link rel="apple-touch-icon" href="${FAVICON_PNG}">
+<script>try { const t = localStorage.getItem('cc-cost-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <style>
 :root{
   color-scheme:light;
   --plane:#f9f9f7; --surface:#fcfcfb;
   --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
-  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10); --shadow:rgba(0,0,0,.12);
   --hue-1:#2a78d6;--hue-2:#eb6834;--hue-3:#1baf7a;--hue-4:#eda100;
   --hue-5:#e87ba4;--hue-6:#008300;--hue-7:#4a3aa7;--hue-8:#e34948;
 }
-@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){
-  color-scheme:dark;
-  --plane:#0d0d0d; --surface:#1a1a19;
-  --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
-  --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
-  --hue-1:#3987e5;--hue-2:#d95926;--hue-3:#199e70;--hue-4:#c98500;
-  --hue-5:#d55181;--hue-6:#008300;--hue-7:#9085e9;--hue-8:#e66767;
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${DARK}
 }}
+:root[data-theme="dark"]{${DARK}
+}
 *{box-sizing:border-box}
 body{margin:0;background:var(--plane);color:var(--ink);
   font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:32px 16px 64px}
@@ -126,7 +142,27 @@ body{margin:0;background:var(--plane);color:var(--ink);
 .links a:hover{background:var(--surface);color:var(--ink)}
 .links a:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
 .links a svg{width:18px;height:18px}
-.links .langs{margin-left:8px}
+/* a divider between the links, the theme button and the languages */
+.hsep{width:1px;height:20px;background:var(--grid);margin:0 6px;flex:none}
+/* theme: an icon button like the links, opening a small menu */
+.theme{position:relative;display:flex}
+.links .ib{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:0;padding:0;
+  background:none;color:var(--ink-2);cursor:pointer}
+.links .ib:hover,.links .ib[aria-expanded="true"]{background:var(--surface);color:var(--ink)}
+.links .ib:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.links .ib svg{width:18px;height:18px}
+.menu{position:absolute;top:calc(100% + 6px);right:0;z-index:10;min-width:160px;padding:4px;
+  background:var(--surface);border:1px solid var(--ring);border-radius:10px;box-shadow:0 4px 16px var(--shadow)}
+.menu[hidden]{display:none}
+/* on a phone the header wraps and the button sits on the left, so the menu opens to the right of it */
+@media (max-width:480px){.menu{right:auto;left:0}}
+.menu button{display:flex;align-items:center;gap:10px;width:100%;font:inherit;font-size:13px;padding:7px 10px;
+  border:0;border-radius:6px;background:none;color:var(--ink-2);cursor:pointer;text-align:left;white-space:nowrap}
+.menu button:hover,.menu button:focus{background:var(--ring);color:var(--ink);outline:none}
+.menu svg{width:16px;height:16px;flex:none}
+.menu svg:last-child{margin-left:auto;visibility:hidden}
+.menu [aria-checked="true"]{color:var(--ink);font-weight:600}
+.menu [aria-checked="true"] svg:last-child{visibility:visible}
 h1{font-size:15px;font-weight:600;margin:0 0 2px}
 .sub{color:var(--muted);font-size:13px;margin:0 0 24px}
 .foot{color:var(--muted);font-size:12px;text-align:center;margin:24px 0 0}
@@ -184,7 +220,7 @@ tr:last-child td{border-bottom:0}
 
 #tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .1s;z-index:9;
   background:var(--surface);border:1px solid var(--ring);border-radius:8px;padding:10px 12px;
-  box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:150px}
+  box-shadow:0 4px 16px var(--shadow);min-width:150px}
 #tip .d{color:var(--muted);font-size:12px;margin:0 0 6px}
 #tip .r{display:flex;align-items:center;gap:8px;justify-content:space-between;margin:3px 0}
 #tip .n{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -201,6 +237,14 @@ svg{display:block;width:100%;height:auto;overflow:visible}
     <a href="${esc(meta.repo)}" target="_blank" rel="noopener" title="GitHub" aria-label="GitHub">${ICON.github}</a>
     <a href="${esc(meta.npm)}" target="_blank" rel="noopener" title="npm" aria-label="npm">${ICON.npm}</a>
     <a href="${esc(meta.site)}" target="_blank" rel="noopener" title="${esc(D.website)}" aria-label="${esc(D.website)}" data-t-title="website" data-t-aria="website">${ICON.globe}</a>
+    <span class="hsep" aria-hidden="true"></span>
+    <div class="theme">
+      <button class="ib" id="themeBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="themeMenu">${ICON.system}</button>
+      <div class="menu" id="themeMenu" role="menu" aria-label="${esc(D.theme)}" data-t-aria="theme" hidden>
+        ${THEMES.map(([t, icon, key]) => `<button role="menuitemradio" aria-checked="false" tabindex="-1" data-theme-set="${t}">${ICON[icon]}<span data-t="${key}">${esc(D[key])}</span>${ICON.check}</button>`).join('')}
+      </div>
+    </div>
+    <span class="hsep" aria-hidden="true"></span>
     <div class="langs" role="group" aria-label="${esc(D.language)}" data-t-aria="language">
       ${Object.keys(LANGS).map((l) => `<button data-lang="${l}">${l.toUpperCase()}</button>`).join('')}
     </div>
@@ -301,6 +345,8 @@ const DATA = ${js(encode(d.rows, d.limits, meta.timezone))};
 const META = ${js(meta)};
 const STRINGS = ${js(strings)};
 const ORDER = ${js(ORDER)};
+// mode -> [icon, label key] for the theme button
+const THEMES = ${js(Object.fromEntries(THEMES.map(([t, icon, key]) => [t, [ICON[icon], key]])))};
 const UNKNOWN = ${js(UNKNOWN)};
 // Row layout, same order as encode() in dashboard.ts
 const R = { d: 0, machine: 1, model: 2, project: 3, session: 4, agent: 5, skill: 6, mcp: 7, calls: 8, cost: 9,
@@ -315,6 +361,8 @@ const ROWS = DATA.rows.map(r => ({
 let lang = META.lang;
 try { const saved = localStorage.getItem('cc-cost-lang'); if (saved && STRINGS[saved]) lang = saved; } catch (e) {}
 let L = STRINGS[lang] || STRINGS.en;
+// 'system', 'light' or 'dark'; the <head> script already applied a saved choice before the first paint
+let theme = document.documentElement.dataset.theme || 'system';
 
 const fill = (s, v) => s.replace(/\\{(\\w+)\\}/g, (_, k) => v[k] ?? '{' + k + '}');
 const $ = (n) => '$' + (n >= 100 ? n.toFixed(0) : n.toFixed(2));
@@ -410,6 +458,7 @@ function applyText() {
   for (const e of document.querySelectorAll('[data-t-aria]')) e.setAttribute('aria-label', L[e.dataset.tAria]);
   for (const e of document.querySelectorAll('[data-t-title]')) e.title = L[e.dataset.tTitle];
   for (const b of document.querySelectorAll('[data-lang]')) b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
+  showTheme();
   const updated = new Date(META.updated).toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US', { timeZone: META.timezone });
   document.getElementById('note').textContent = fill(L.note, { updated, machines: META.machines, min: META.first || '–', max: META.last || '–', prices: META.prices });
   document.getElementById('footText').textContent = fill(L.footer, { version: META.version });
@@ -713,6 +762,52 @@ for (const b of document.querySelectorAll('[data-lang]')) {
     applyText(); render();
   });
 }
+
+// Theme: one button showing the current mode, opening a menu of the three (a WAI-ARIA menu button)
+const themeBtn = document.getElementById('themeBtn'), themeMenu = document.getElementById('themeMenu');
+const themeItems = [...themeMenu.querySelectorAll('[data-theme-set]')];
+function showTheme() {
+  const [icon, key] = THEMES[theme];
+  themeBtn.innerHTML = icon;
+  const label = fill(L.themeButton, { mode: L[key] });
+  themeBtn.title = label;
+  themeBtn.setAttribute('aria-label', label);
+  for (const b of themeItems) b.setAttribute('aria-checked', String(b.dataset.themeSet === theme));
+}
+function setTheme(t) {
+  theme = t;
+  if (theme === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  try { if (theme === 'system') localStorage.removeItem('cc-cost-theme'); else localStorage.setItem('cc-cost-theme', theme); } catch (e) {}
+  showTheme();
+}
+function openMenu(last) {
+  themeMenu.hidden = false;
+  themeBtn.setAttribute('aria-expanded', 'true');
+  themeItems[last ? themeItems.length - 1 : Math.max(0, themeItems.findIndex(b => b.dataset.themeSet === theme))].focus();
+}
+function closeMenu(refocus) {
+  if (themeMenu.hidden) return;
+  themeMenu.hidden = true;
+  themeBtn.setAttribute('aria-expanded', 'false');
+  if (refocus) themeBtn.focus();
+}
+themeBtn.addEventListener('click', () => (themeMenu.hidden ? openMenu(false) : closeMenu(true)));
+themeBtn.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); openMenu(e.key === 'ArrowUp'); }
+});
+themeMenu.addEventListener('keydown', (e) => {
+  const i = themeItems.indexOf(document.activeElement);
+  const go = (n) => { e.preventDefault(); themeItems[(n + themeItems.length) % themeItems.length].focus(); };
+  if (e.key === 'ArrowDown') go(i + 1);
+  else if (e.key === 'ArrowUp') go(i - 1);
+  else if (e.key === 'Home') go(0);
+  else if (e.key === 'End') go(themeItems.length - 1);
+  else if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); }
+  else if (e.key === 'Tab') closeMenu(false);
+});
+for (const b of themeItems) b.addEventListener('click', () => { setTheme(b.dataset.themeSet); closeMenu(true); });
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.theme')) closeMenu(false); });
 
 addEventListener('resize', render);
 applyText();
