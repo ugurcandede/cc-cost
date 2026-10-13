@@ -8,6 +8,7 @@
    is never parsed beyond that.
 3. Removes duplicates (below) and sums the tokens per day, project, session, model and attribution.
 4. Merges the result into this machine's snapshot in the shared folder (see [the archive](#the-archive)).
+   With `remote` set, uploads that snapshot to the server over SSH and downloads the other machines'.
 5. Reads every machine's snapshot, prices it, prints the report and rewrites `dashboard.html`.
 
 ## Costs

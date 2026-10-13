@@ -10,13 +10,14 @@ export interface Config {
     plan?: string; // key of PLANS, for the plan-value multiple
     anonymizeProjects?: boolean;
     pricing?: Record<string, number[]>; // per-model overrides, same layout as PRICES
+    remote?: string; // user@host:path of a server reached over ssh
     claudeDirs?: string[]; // Claude Code data folders, one per account; replaces the defaults and CLAUDE_CONFIG_DIR
 }
 
 // Monthly subscription price in USD
 export const PLANS: Record<string, number> = { pro: 20, max5x: 100, max20x: 200 };
 
-export const CONFIG_KEYS = ['syncDir', 'machine', 'lang', 'timezone', 'plan', 'anonymizeProjects', 'claudeDirs'] as const;
+export const CONFIG_KEYS = ['syncDir', 'machine', 'lang', 'timezone', 'plan', 'anonymizeProjects', 'claudeDirs', 'remote'] as const;
 
 export const configFile = () => path.join(configDir(), 'config.json');
 
