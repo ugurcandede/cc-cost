@@ -78,6 +78,14 @@ up)
     transcript "$DEMO/demo-pc/.claude" claude-opus-5 12 3000            # personal account
     transcript "$DEMO/demo-pc/.claude-work" claude-sonnet-5 30 1500     # work account
     transcript "$DEMO/demo-mac/.claude" claude-haiku-4-5 40 800
+    # Logins, the way Claude Code records them (ids and plan only): demo-pc's ~/.claude is a Max account,
+    # its ~/.claude-work and demo-mac's ~/.claude are the same Team seat, so that account spans both machines.
+    # The default folder's login sits next to it in ~/.claude.json, another folder's inside it.
+    max='{"oauthAccount":{"accountUuid":"demo-max","organizationUuid":"demo-max-org","organizationType":"claude_max","organizationRateLimitTier":"default_claude_max_5x"}}'
+    team='{"oauthAccount":{"accountUuid":"demo-team","organizationUuid":"demo-team-org","organizationType":"claude_team","seatTier":"team_tier_1","organizationRateLimitTier":"default_raven","userRateLimitTier":"default_claude_max_5x"}}'
+    echo "$max" > "$DEMO/demo-pc/.claude.json"
+    echo "$team" > "$DEMO/demo-pc/.claude-work/.claude.json"
+    echo "$team" > "$DEMO/demo-mac/.claude.json"
     for m in demo-pc demo-mac; do
         h="$DEMO/$m"
         # "demo-pi" stands for pi@raspberrypi.local and carries the port; the key and known_hosts apply to any

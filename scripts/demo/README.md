@@ -4,8 +4,10 @@ For developers. `demo.sh` runs the cc-cost sources from this repo against two pr
 throwaway SSH server in Docker, so you can try reading several Claude accounts and sharing through your
 own server without touching your real config, Claude folders, `~/.ssh` or schedule.
 
-- **demo-pc** has two Claude accounts: `~/.claude` with Opus transcripts and `~/.claude-work` with Sonnet.
-- **demo-mac** has one account, with Haiku transcripts.
+- **demo-pc** has two Claude accounts: `~/.claude` logged in to a Max 5x account, with Opus transcripts,
+  and `~/.claude-work` logged in to a Team seat, with Sonnet.
+- **demo-mac** has one: `~/.claude` logged in to the same Team seat, with Haiku transcripts. So the Team
+  account spans both machines.
 - **demo-pi** is the SSH server in Docker, standing in for `pi@raspberrypi.local`. Both demo machines can
   log in to it with a key, without a password.
 
@@ -55,7 +57,8 @@ box, q or Esc cancels without saving anything.
 | Language | English or Türkçe |
 | Where to keep the data | **SSH server…**, then type `demo-pi:cc-cost` |
 | Claude Code folders to read | both are ticked: Enter |
-| Your plan | Enter |
+| Claude account in ~/.claude | a name, like `Personal`; then its plan: Max 5x is preselected, found in the login |
+| Claude account in ~/.claude-work | a name, like `Work`; then its plan: Team Premium is preselected, or pick Sponsored / free |
 | Sync when a Claude Code session ends | Yes (the hook goes into the demo Claude folders) |
 | Open the dashboard? | No (see [the browser on Windows](#the-browser-on-windows)) |
 
@@ -86,7 +89,32 @@ scripts/demo/demo.sh demo-pc models      # Opus, Sonnet and Haiku together
 scripts/demo/demo.sh server              # demo-pc.json and demo-mac.json on the server
 ```
 
-## 3. Testing SSH
+## 3. Accounts and plans
+
+The logins are fake but shaped like Claude Code's own `.claude.json` (ids and plan, no e-mail). Name the
+Team seat on demo-mac too, with the same name; until then each machine shows the folder's name for it.
+
+```bash
+scripts/demo/demo.sh demo-mac setup             # SSH server demo-pi:cc-cost, then name the Team account
+scripts/demo/demo.sh demo-pc                    # picks up demo-mac's file
+
+scripts/demo/demo.sh demo-pc accounts           # Personal (Opus), Work (Sonnet on demo-pc + Haiku on demo-mac)
+scripts/demo/demo.sh demo-pc plan               # each account against its own plan, then the paid ones together
+scripts/demo/demo.sh demo-pc blocks --last 1    # 5-hour windows, one timeline per account
+scripts/demo/demo.sh demo-pc models --account work
+scripts/demo/demo.sh demo-pc config             # Claude accounts: rename, change a plan, a sponsored seat
+```
+
+Usage from before accounts were told apart has no account. To see the question setup asks about it, give
+demo-pc a day like that and run `config` → Claude accounts → Usage from before accounts:
+
+```bash
+node -e "const f=process.argv[1],fs=require('fs'),s=JSON.parse(fs.readFileSync(f));s.rows.push({d:'2026-07-01',p:'old',s:'old',m:'claude-opus-5',t:[1e6,0,0,0,0,3,0,0,0,0,0,0,0,0]});fs.writeFileSync(f,JSON.stringify(s))" "$(d="${TMPDIR:-/tmp}/cc-cost-demo/demo-pc"; cygpath -w "$d/AppData/Roaming/cc-cost/data/machines/demo-pc.json" 2>/dev/null || echo "$d/.config/cc-cost/data/machines/demo-pc.json")"
+scripts/demo/demo.sh demo-pc accounts --no-sync # $5 under (unknown)
+scripts/demo/demo.sh demo-pc config             # give it to an account
+```
+
+## 4. Testing SSH
 
 **The server is down.** cc-cost warns once and reports from the copies it already has:
 
