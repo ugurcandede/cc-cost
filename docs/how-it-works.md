@@ -2,7 +2,7 @@
 
 ## Per run
 
-1. Finds every `*.jsonl` transcript under `~/.claude/projects` (or `CLAUDE_CONFIG_DIR`), subagent
+1. Finds every `*.jsonl` transcript under `~/.claude/projects` (or each `claudeDirs` folder, or `CLAUDE_CONFIG_DIR`), subagent
    transcripts included.
 2. Reads the assistant messages that carry a `usage` block, and the rate-limit events. Message content
    is never parsed beyond that.

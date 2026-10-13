@@ -10,7 +10,7 @@ import { CONFIG_KEYS, configFile, loadConfig, PLANS, saveConfig, type Config } f
 import { writeDashboard } from './dashboard.ts';
 import { paint, setColor, table } from './format.ts';
 import { fill, L, lang, LANGS, setLang } from './i18n.ts';
-import { claudeDirs, configDir, defaultMachine, retentionDays } from './paths.ts';
+import { claudeDirs, configDir, defaultMachine, findClaudeDirs, parseDirs, retentionDays } from './paths.ts';
 import { loadPrices } from './pricing.ts';
 import {
     blocksReport, dimensionJson, dimensionReport, DIMENSIONS, insights, limitsInRange, periodJson, periodReport, PERIODS,
@@ -18,7 +18,7 @@ import {
 } from './reports.ts';
 import { localClock } from './scan.ts';
 import {
-    claudeSettingsFile, currentRunner, dataFolderIn, hookInstalled, installHook, installSchedule, isEphemeral, removeHook,
+    claudeSettingsFiles, currentRunner, dataFolderIn, hookInstalled, installHook, installSchedule, isEphemeral, removeHook,
     removeSchedule, SCHEDULE_TIME, scheduleInstalled, syncFolders,
 } from './setup.ts';
 import { loadAll } from './snapshot.ts';
@@ -74,6 +74,7 @@ const resolveSettings = (): Settings => ({
     planPrice: PLANS[config.plan ?? 'max5x'] ?? 100,
     anonymize: !!config.anonymizeProjects,
     pricing: config.pricing ?? {},
+    claudeDirs: claudeDirs(config.claudeDirs),
 });
 let settings = resolveSettings();
 setLang(settings.lang);
@@ -208,7 +209,7 @@ async function setup() {
     const S = L().setup;
     const runner = currentRunner();
     if (opt.remove) {
-        const removed = [removeSchedule(), removeHook() ? claudeSettingsFile() : undefined].filter(Boolean);
+        const removed = [removeSchedule(), ...claudeSettingsFiles(settings.claudeDirs).filter(removeHook)].filter(Boolean);
         return out(removed.length ? removed.map((w) => fill(S.removed, { what: w! })).join('\n') : S.nothingToRemove);
     }
     const interactive = !opt.yes && process.stdin.isTTY;
@@ -232,6 +233,15 @@ async function setup() {
         const planAnswer = await ask(rl, fill(S.plan, { current: next.plan ?? 'max5x' }));
         if (planAnswer && PLANS[planAnswer]) next.plan = planAnswer;
         next.plan ??= 'max5x';
+        // Several accounts keep separate folders (CLAUDE_CONFIG_DIR=~/.claude-work); read them all
+        const found = [...new Set([...claudeDirs(next.claudeDirs), ...findClaudeDirs()])];
+        if (found.length > 1) {
+            if (yes(await ask(rl, fill(S.claudeDirs, { list: found.join(', ') })))) next.claudeDirs = found;
+            else {
+                const chosen = parseDirs(await ask(rl, S.askClaudeDirs));
+                if (chosen.length) next.claudeDirs = chosen;
+            }
+        }
 
         saveConfig(next);
         config = next;
@@ -240,14 +250,15 @@ async function setup() {
         out(fill(L().setup.saved, { file: configFile() }));
 
         const wantSchedule = !opt['no-schedule'] && yes(await ask(rl, fill(S.schedule, { time: SCHEDULE_TIME })));
-        const wantHook = !opt['no-hook'] && yes(await ask(rl, fill(S.hook, { file: claudeSettingsFile() })));
+        const hookFiles = claudeSettingsFiles(settings.claudeDirs);
+        const wantHook = !opt['no-hook'] && yes(await ask(rl, fill(S.hook, { file: hookFiles.join(', ') })));
         if ((wantSchedule || wantHook) && isEphemeral(runner)) out(S.npx);
         else {
             if (wantSchedule) {
                 const r = installSchedule(runner);
                 out(fill(r.ok ? S.scheduled : S.scheduleFailed, r.ok ? { what: r.what } : { reason: r.what }));
             }
-            if (wantHook) out(fill(installHook(runner) ? S.hookAdded : S.hookKept, { file: claudeSettingsFile() }));
+            if (wantHook) for (const file of hookFiles) out(fill(installHook(runner, file) ? S.hookAdded : S.hookKept, { file }));
         }
     } finally {
         rl?.close();
@@ -267,9 +278,10 @@ async function status() {
         syncDir: settings.syncDir,
         machine: settings.machine,
         machines: snaps.map((s) => ({ name: s.machine, updated: s.updated, days: new Set(s.rows.map((r) => r.d)).size })),
-        retentionDays: retentionDays(claudeDirs()),
+        claudeDirs: settings.claudeDirs,
+        retentionDays: retentionDays(settings.claudeDirs),
         schedule: scheduleInstalled(),
-        hook: hookInstalled(),
+        hook: claudeSettingsFiles(settings.claudeDirs).every(hookInstalled),
         prices: { source: prices.table.source, date: prices.table.date },
     };
     if (opt.json) return out(JSON.stringify(info, null, 2));
@@ -280,6 +292,7 @@ async function status() {
         [St.syncDir, info.syncDir],
         [St.machine, info.machine],
         [St.machines, info.machines.length ? info.machines.map((m) => fill(St.machineLine, { name: m.name, updated: when(m.updated), days: m.days })).join('\n' + ' '.repeat(0)) : St.none],
+        [St.claudeDirs, info.claudeDirs.join('\n') || St.none],
         [St.retention, fill(St.retentionValue, { n: info.retentionDays })],
         [St.scheduler, info.schedule ? St.yes : St.no],
         [St.hook, info.hook ? St.yes : St.no],
@@ -364,7 +377,7 @@ async function main() {
             if (!CONFIG_KEYS.includes(key as (typeof CONFIG_KEYS)[number]))
                 fail(fill(L().configUnknownKey, { key: String(key), keys: CONFIG_KEYS.join(', ') }));
             const next: Record<string, unknown> = { ...config };
-            next[key!] = key === 'anonymizeProjects' ? value === 'true' : key === 'syncDir' ? path.resolve(value) : value;
+            next[key!] = key === 'anonymizeProjects' ? value === 'true' : key === 'syncDir' ? path.resolve(value) : key === 'claudeDirs' ? parseDirs(value) : value;
             saveConfig(next as Config);
             return out(fill(L().configSet, { key: key!, value: String(next[key!]) }));
         }

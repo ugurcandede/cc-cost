@@ -5,13 +5,22 @@ import path from 'node:path';
 const HOME = os.homedir();
 const XDG_CONFIG = process.env.XDG_CONFIG_HOME || path.join(HOME, '.config');
 
-// Claude Code data roots. CLAUDE_CONFIG_DIR may list several, comma-separated.
-export function claudeDirs(): string[] {
+// Comma-separated folders, with a leading ~ meaning the home folder
+export const parseDirs = (list: string) =>
+    list.split(',').map((s) => s.trim()).filter(Boolean).map((s) => path.resolve(s.replace(/^~(?=$|[\\/])/, HOME)));
+
+// Claude Code data roots. The configured list wins over CLAUDE_CONFIG_DIR: a hook started from one
+// account's session inherits that account's CLAUDE_CONFIG_DIR and would otherwise sync only that account.
+export function claudeDirs(configured?: string[]): string[] {
     const env = process.env.CLAUDE_CONFIG_DIR;
-    const dirs = env
-        ? env.split(',').map((s) => s.trim()).filter(Boolean)
-        : [path.join(HOME, '.claude'), path.join(XDG_CONFIG, 'claude')];
+    const dirs = configured?.length ? configured : env ? parseDirs(env) : [path.join(HOME, '.claude'), path.join(XDG_CONFIG, 'claude')];
     return dirs.filter((d) => fs.existsSync(path.join(d, 'projects')));
+}
+
+// ~/.claude, ~/.claude-work and the like: one folder per Claude account
+export function findClaudeDirs(): string[] {
+    const inHome = fs.readdirSync(HOME).filter((n) => n.startsWith('.claude')).map((n) => path.join(HOME, n));
+    return [...inHome, path.join(XDG_CONFIG, 'claude')].filter((d) => fs.existsSync(path.join(d, 'projects')));
 }
 
 export function configDir(): string {

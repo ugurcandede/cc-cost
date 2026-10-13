@@ -15,6 +15,7 @@
 | `plan` | `max5x` | `pro`, `max5x` or `max20x`; the dashboard's plan multiple and `plan` use it |
 | `anonymizeProjects` | `false` | `true` stores a hash of each project name instead of the name |
 | `pricing` | | Price overrides, below. Edit the file for this one |
+| `claudeDirs` | `~/.claude`, `~/.config/claude` | Claude Code data folders to read, one per account; comma-separated with `config set`. Overrides `CLAUDE_CONFIG_DIR` |
 
 Command-line flags win over the file for a single run: `--sync-dir`, `--lang`, `--tz`.
 
@@ -54,12 +55,20 @@ output as "No price for".
 
 | Variable | Effect |
 |---|---|
-| `CLAUDE_CONFIG_DIR` | Where Claude Code keeps its data; a comma-separated list is read in full |
+| `CLAUDE_CONFIG_DIR` | Where Claude Code keeps its data; a comma-separated list is read in full. Ignored when `claudeDirs` is set |
 | `CC_COST_DIR` | Shared folder for this run, like `--sync-dir` |
 | `NO_COLOR` | No colors |
 | `XDG_CONFIG_HOME` | Base of the config folder outside Windows |
 
-Without `CLAUDE_CONFIG_DIR`, cc-cost reads `~/.claude` and `~/.config/claude`.
+Without `claudeDirs` or `CLAUDE_CONFIG_DIR`, cc-cost reads `~/.claude` and `~/.config/claude`.
+
+### Several Claude accounts
+
+Each account keeps its own folder (for example `CLAUDE_CONFIG_DIR=~/.claude-work claude`). `setup`
+finds the `~/.claude*` folders and offers to read them all, and adds the SessionEnd hook to each one's
+`settings.json`. Or set them yourself: `cc-cost config set claudeDirs "~/.claude,~/.claude-work"`, then
+run `setup` again for the hooks. The list wins over `CLAUDE_CONFIG_DIR` on purpose: a hook started from
+one account's session inherits that account's variable and would otherwise sync only that account.
 
 ## Privacy
 

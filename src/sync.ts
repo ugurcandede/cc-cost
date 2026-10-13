@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { claudeDirs, retentionDays } from './paths.ts';
+import { retentionDays } from './paths.ts';
 import { localClock, scan, type ScanResult } from './scan.ts';
 import { loadOwn, merge, save } from './snapshot.ts';
 
@@ -11,6 +11,7 @@ export interface Settings {
     planPrice: number;
     anonymize: boolean;
     pricing: Record<string, number[]>;
+    claudeDirs: string[];
 }
 
 export const dashboardPath = (s: Settings) => path.join(s.syncDir, 'dashboard.html');
@@ -23,7 +24,7 @@ export interface SyncResult {
 
 // Scan this machine's transcripts into its snapshot in the sync folder.
 export async function sync(s: Settings): Promise<SyncResult> {
-    const dirs = claudeDirs();
+    const dirs = s.claudeDirs;
     const result = await scan(dirs, { timezone: s.timezone, anonymize: s.anonymize });
     const prev = loadOwn(s.syncDir, s.machine, s.timezone);
     const safeFrom = localClock(s.timezone)(new Date(Date.now() - (retentionDays(dirs) - 1) * 864e5).toISOString()).d;

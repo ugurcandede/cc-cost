@@ -2,7 +2,6 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { claudeDirs } from './paths.ts';
 
 const HOME = os.homedir();
 export const SCHEDULE_TIME = '10:23';
@@ -199,7 +198,9 @@ interface ClaudeSettings {
     [key: string]: unknown;
 }
 
-export const claudeSettingsFile = () => path.join(claudeDirs()[0] ?? process.env.CLAUDE_CONFIG_DIR?.split(',')[0] ?? path.join(HOME, '.claude'), 'settings.json');
+// Every account gets the hook, so a session of any of them triggers a sync
+export const claudeSettingsFiles = (dirs: string[]) =>
+    (dirs.length ? dirs : [process.env.CLAUDE_CONFIG_DIR?.split(',')[0] ?? path.join(HOME, '.claude')]).map((d) => path.join(d, 'settings.json'));
 
 // Forward slashes work in every shell Claude Code may run hooks with, Git Bash included.
 export const hookCommand = (r: Runner) => [r.node, r.script].map((p) => `"${p.replace(/\\/g, '/')}"`).join(' ') + ' sync --quiet';
@@ -215,12 +216,12 @@ function writeSettings(file: string, s: ClaudeSettings) {
     fs.writeFileSync(file, JSON.stringify(s, null, 2) + '\n');
 }
 
-export function hookInstalled(file = claudeSettingsFile()): boolean {
+export function hookInstalled(file: string): boolean {
     return (readSettings(file).hooks?.SessionEnd ?? []).some((e) => e.hooks?.some(isOurs));
 }
 
 // Adds the SessionEnd hook, or updates its command if cc-cost moved. Returns false if it was already current.
-export function installHook(r: Runner, file = claudeSettingsFile()): boolean {
+export function installHook(r: Runner, file: string): boolean {
     const s = readSettings(file);
     const entries = ((s.hooks ??= {}).SessionEnd ??= []);
     const command = hookCommand(r);
@@ -234,7 +235,7 @@ export function installHook(r: Runner, file = claudeSettingsFile()): boolean {
     return true;
 }
 
-export function removeHook(file = claudeSettingsFile()): boolean {
+export function removeHook(file: string): boolean {
     if (!hookInstalled(file)) return false;
     const s = readSettings(file);
     const kept = (s.hooks!.SessionEnd ?? [])
