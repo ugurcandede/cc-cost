@@ -96,6 +96,17 @@ test('synthetic messages and non-assistant lines are ignored', async () => {
     assert.equal((await scan([dir], opts)).rows[0]!.t[T.calls], 1);
 });
 
+test('a transcript that disappears after listing is skipped', async (t) => {
+    const dir = claudeDir({ 'a.jsonl': [call('1')] });
+    // A resumed session's subagent link whose original session was cleaned up
+    try {
+        fs.symlinkSync(path.join(dir, 'missing.jsonl'), path.join(dir, 'projects', 'Q--Projects-app', 'sess-1', 'subagents', 'agent-x.jsonl'));
+    } catch {
+        return t.skip('symlinks not permitted');
+    }
+    assert.equal((await scan([dir], opts)).rows[0]!.t[T.calls], 1);
+});
+
 test('rate-limit events: one per limit period, at its first hit', async () => {
     const q = { quotaLimits: { rateLimitType: 'five_hour', status: 'rejected', resetsAt: 1788801600 } };
     const dir = claudeDir({

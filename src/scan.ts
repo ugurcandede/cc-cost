@@ -127,45 +127,51 @@ export async function scan(dirs: string[], opts: { timezone: string; anonymize: 
 
     for (const file of files) {
         const rl = readline.createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity });
-        for await (const line of rl) {
-            if (!line.includes('"usage"') && !line.includes('"quotaLimits"')) continue;
-            let d;
-            try {
-                d = JSON.parse(line);
-            } catch {
-                continue; // a line cut off by a crash or a concurrent write
-            }
-            const q = d.quotaLimits;
-            if (q && d.timestamp) {
-                // Retries inside one limit period share resetsAt; keep the first hit of each period.
-                const key = `${q.rateLimitType}|${q.status}|${q.resetsAt ?? d.timestamp}`;
-                const seen = limits.get(key);
-                if (!seen || d.timestamp < seen.ts)
-                    limits.set(key, { ts: d.timestamp, type: String(q.rateLimitType), status: String(q.status), ...(typeof q.resetsAt === 'number' && { resetsAt: q.resetsAt }) });
-            }
+        try {
+            for await (const line of rl) {
+                if (!line.includes('"usage"') && !line.includes('"quotaLimits"')) continue;
+                let d;
+                try {
+                    d = JSON.parse(line);
+                } catch {
+                    continue; // a line cut off by a crash or a concurrent write
+                }
+                const q = d.quotaLimits;
+                if (q && d.timestamp) {
+                    // Retries inside one limit period share resetsAt; keep the first hit of each period.
+                    const key = `${q.rateLimitType}|${q.status}|${q.resetsAt ?? d.timestamp}`;
+                    const seen = limits.get(key);
+                    if (!seen || d.timestamp < seen.ts)
+                        limits.set(key, { ts: d.timestamp, type: String(q.rateLimitType), status: String(q.status), ...(typeof q.resetsAt === 'number' && { resetsAt: q.resetsAt }) });
+                }
 
-            const msg = d.message;
-            if (d.type !== 'assistant' || !msg?.usage || !msg.model || msg.model === '<synthetic>' || !d.timestamp) continue;
+                const msg = d.message;
+                if (d.type !== 'assistant' || !msg?.usage || !msg.model || msg.model === '<synthetic>' || !d.timestamp) continue;
 
-            // Resume and compaction rewrite the same message into several files; streaming writes one
-            // line per content block with output_tokens still growing. Keep the most complete copy.
-            const key = `${msg.id}|${d.requestId}`;
-            const prev = calls.get(key);
-            if (prev) duplicates++;
-            if (prev && (prev.usage.output_tokens ?? 0) >= (msg.usage.output_tokens ?? 0)) continue;
-            calls.set(key, {
-                ts: d.timestamp,
-                session: d.sessionId ?? '',
-                cwd: d.cwd ?? '',
-                model: msg.model,
-                usage: msg.usage,
-                agent: d.isSidechain ? d.attributionAgent || 'subagent' : undefined,
-                skill: d.attributionSkill,
-                mcp: d.attributionMcpServer,
-                effort: d.effort,
-                entrypoint: d.entrypoint,
-                background: d.sessionKind === 'bg',
-            });
+                // Resume and compaction rewrite the same message into several files; streaming writes one
+                // line per content block with output_tokens still growing. Keep the most complete copy.
+                const key = `${msg.id}|${d.requestId}`;
+                const prev = calls.get(key);
+                if (prev) duplicates++;
+                if (prev && (prev.usage.output_tokens ?? 0) >= (msg.usage.output_tokens ?? 0)) continue;
+                calls.set(key, {
+                    ts: d.timestamp,
+                    session: d.sessionId ?? '',
+                    cwd: d.cwd ?? '',
+                    model: msg.model,
+                    usage: msg.usage,
+                    agent: d.isSidechain ? d.attributionAgent || 'subagent' : undefined,
+                    skill: d.attributionSkill,
+                    mcp: d.attributionMcpServer,
+                    effort: d.effort,
+                    entrypoint: d.entrypoint,
+                    background: d.sessionKind === 'bg',
+                });
+            }
+        } catch (e) {
+            // A resumed session links its subagent transcripts to the original session's; once cleanup
+            // deletes the original, the link dangles. A file can also be deleted after it was listed.
+            if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
         }
     }
 
