@@ -39,6 +39,9 @@ const ICON = {
 };
 // Header logo as the tab icon; a standalone SVG needs xmlns
 const FAVICON = 'data:image/svg+xml,' + encodeURIComponent(ICON.logo.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '));
+// The same logo as a 180px PNG, for browsers without SVG favicons (Safari) and as the touch icon.
+// Redraw it if the logo changes.
+const FAVICON_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAAFd0lEQVR42u3cv4obRxwH8H0EPYIeQY+gR7hu28V1+m1Vpkjjxq2IyzRXBNJeipQBVS6W4HBNHHDhI0UcEwgKE+ZAOe5O/08zv/384IuJJZ3tmU+W387MqmkKqKFvp0PfXg19uxj6djn07c3Qt6uhb9dSZFZ5jpZ5ztLcTZuxVgbcDX17PfTtHSBhcpfntAsPfOjbSf6HuvKO60qe5nwS7Wq8NLmjz7Lqq/bQt/PcZ5lM2UwyMXdFFlfsC2BeuMmTPW8iFyVCnrnZkyNvHmelYO5cleVEV+vu0pj1ynLy3vpSa8pWMOScKyGTl8SsX5aX6KsnMAvUMMvoUOuZ5ZI9tdUMsfrxzDqzAZUS0p1iB9CmiZS0+TI7BrSbQCnuJvGYg0YGUErMYl/MU62GFN56TK1qyPhWPfKTJgZMasjcBoqMZ8Ml984GSmrKVO8s8XvpfPjIAEmNmdjilthb4nYFJczuoZtBCXVzqN2QUG1H/sZIgyI153oTtHMbUv35Dv2zxOuj87evGwyJkCvnniXWOenI2923r/v1p59+WH9+/2499kpjkMYijUnobfCIp+t+WbyCeAvuNEYhT99F2yFME/Xlwy21WyqNUUDUqyba/6WuzPtdqaPNfxOtZ1b7VbSeOhTodNOj9qs0ZkBrN7QdQJ8/6rACGmiggQYaaKCBBhpoBTTQQAMNNNBAAw000EADDbQCGmiggQb6Berj998+e345vZbeAzTQVWDedQwOQQ000C9a+zxZkt4LNNChelyggQYaaKCBBhpooIEGGmiggQYaaKCBBhpooIEGGmiggQYaaKCBBhpooIEGGmiggQYaaKCBBhpooIEGGmigo4E+9QOtQAN9UcynfqAVaKAvVud4oBVooEP1u0ADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQJ8MdA1PlwANdKinS4AGOtTTJUADHQof0EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAAw000EADDTTQQAMNNNBAn/Wp71p+JtC+lyPUzwTaNyeF+5lA+267kAU00EADDTTQQAMNNNAKaKCBBhpooIEGGmiggQYaaAU00EADDTTQQAMNNNBAAw20AhpooIEuF/Tfnz7uPclj+gzQFYH+4+cf/3st/bprje0zQFcC+vP7d/97/cuH262Tn95z7GfSn7utSvq7AV0B6DSRD5/BS//9HIKxfgbowkH/89ef61+//urR96TfT68/rDF/JhroVSTQaaJuX/fPvi+9vjmhY/9MINCrBPomEujf3n6z03vT++7r9+/e7PSZ9L77OuTPKfXvFgj0TQK9jPIP2nXyN9/vM28igV4m0ItIPZSMOosE+spASJBcJdBTAyFBMm1SDX17ZzCk8tw19zX07bUBkcpzvQm6MyBSebpN0PpoidE/b6BeGRSpdofwYWk7JES7sQF6YmCk0kyaxyrSNriMJsvmqXJzKNXfDD6C+sYgSTWn67bV0LdzAyWVZN7sUnppqbp3fqKXdr5Dij23sbV3fgS1c9JS7rnnQ8ruoVSxK7gH6JnWQwprNWbNMWVLXIre4j4QtVUPqWdVY0fUNlyk3A2UA0BP3CTKJW4Cnzx8BLXADLVExfwAtZ5aztYzvxhmqx9S1WrGgevUNl/kFJsmXVNC5R1FfbUc0y/PmtIqH2hytZZ9rsqLpuTKR0/11rK1V977COiFYc+thMgTKxjzptZyxZYqr8g7rl13bh5Hd7PXXWRN+QJX7S5/66mbyFg3edd5bqfNWCsDv8qrJMvcZ7mSl33lvclztchzVwTgfwGuCy77dqbizQAAAABJRU5ErkJggg==';
 
 // Strings repeat across thousands of rows; store each once and refer to it by index.
 function dictionary() {
@@ -88,7 +91,9 @@ export function writeDashboard(d: { rows: PricedRow[]; limits: MachineLimit[] },
 <html lang="${esc(meta.lang)}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>cc-cost</title>
-<link rel="icon" href="${FAVICON}">
+<link rel="icon" type="image/png" sizes="180x180" href="${FAVICON_PNG}">
+<link rel="icon" type="image/svg+xml" href="${FAVICON}">
+<link rel="apple-touch-icon" href="${FAVICON_PNG}">
 <style>
 :root{
   color-scheme:light;
