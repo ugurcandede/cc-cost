@@ -2,8 +2,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
-import readline from 'node:readline/promises';
 import { parseArgs } from 'node:util';
 import { applyFilter, applyHourFilter, hourFilterable, priceRows, type Filter } from './aggregate.ts';
 import { CONFIG_KEYS, configFile, loadConfig, PLANS, saveConfig, type Config } from './config.ts';
@@ -16,10 +16,12 @@ import {
     blocksReport, dimensionJson, dimensionReport, DIMENSIONS, insights, limitsInRange, periodJson, periodReport, PERIODS,
     planReport, renderCsv, renderTable, summary, summaryJson, type Dimension, type Period, type Report,
 } from './reports.ts';
+import { probe, remoteParts, remoteProblem, sshFailure } from './remote.ts';
+import { Cancelled, checklist, input, select, track, type Choice } from './prompt.ts';
 import { localClock } from './scan.ts';
 import {
     claudeSettingsFiles, currentRunner, dataFolderIn, hookInstalled, installHook, installSchedule, isEphemeral, removeHook,
-    removeSchedule, SCHEDULE_TIME, scheduleInstalled, syncFolders,
+    removeSchedule, SCHEDULE_TIME, scheduleInstalled, syncFolders, type SyncFolder,
 } from './setup.ts';
 import { loadAll } from './snapshot.ts';
 import { installMethod, isNewer, latestVersion, updateCommand } from './update.ts';
@@ -75,6 +77,7 @@ const resolveSettings = (): Settings => ({
     anonymize: !!config.anonymizeProjects,
     pricing: config.pricing ?? {},
     claudeDirs: claudeDirs(config.claudeDirs),
+    remote: opt.offline ? undefined : config.remote || undefined,
 });
 let settings = resolveSettings();
 setLang(settings.lang);
@@ -131,6 +134,8 @@ const updateCache = () => path.join(configDir(), 'update-check.json');
 async function data(verbose: boolean) {
     if (!opt['no-sync']) {
         const r = await sync(settings);
+        if (r.remoteError) console.error(fill(L().remoteFailed, { remote: settings.remote!, reason: r.remoteError }) + sshHint(r.remoteError, settings.remote!, '\n  '));
+        else if (verbose && settings.remote) out(fill(L().remoteSynced, { remote: settings.remote }));
         if (verbose) {
             out(fill(L().scanned, { machine: settings.machine, files: r.scan.files, dupes: r.scan.duplicates }));
             out(fill(L().snapshot, { file: r.file }) + (r.kept ? fill(L().kept, { n: r.kept }) : ''));
@@ -200,72 +205,326 @@ function emit(report: Report, json: unknown, empty: boolean) {
 
 const machineMatch = (f: Filter) => (m: string) => !f.machine?.length || f.machine.some((w) => m.toLowerCase().includes(w.toLowerCase()));
 
-async function ask(rl: readline.Interface | undefined, question: string): Promise<string> {
-    return rl ? (await rl.question(question)).trim() : '';
+// A path under the home folder, shown from ~
+function tilde(p: string): string {
+    const rel = path.relative(path.resolve(os.homedir()), p);
+    return !rel ? '~' : rel.startsWith('..') || path.isAbsolute(rel) ? p : path.join('~', rel);
 }
-const yes = (answer: string) => answer === '' || /^[yeYE]/.test(answer);
+
+// Menus need a terminal on both ends; --yes, CI and pipes take the defaults instead
+const interactiveTerminal = () => !opt.yes && !!process.stdin.isTTY && !!process.stdout.isTTY;
+
+// What to check after an ssh failure, in plain words; empty for one ssh's message already explains
+function sshHint(message: string, remote: string, before: string): string {
+    const kind = sshFailure(message);
+    const parts = remoteParts(remote);
+    if (!kind || !parts) return '';
+    const H = L().sshHint;
+    const text = kind === 'auth' ? (parts.user ? fill(H.authUser, { user: parts.user }) : H.auth) : fill(H[kind], { known: parts.known });
+    return before + text;
+}
+
+const ok = (text: string) => out(paint('green', '✓ ') + text);
+const bad = (text: string) => out(paint('red', '✗ ') + text);
+
+// ---------- questions, shared by setup and the settings menu. Each takes the bold line shown above its
+// options, and when answered leaves that line with a ✓ and the answer in place of the menu.
+
+const S = () => L().setup;
+const answered = (head: string, answer: string) => out(`${head}  ${paint('green', '✓')} ${answer}`);
+
+async function choose<T>(head: string, intro: string[], choices: Choice<T>[], initial: number): Promise<Choice<T>> {
+    out('');
+    const c = await select([head, ...intro.map((l) => paint('dim', l))], S().keys, choices, initial);
+    answered(head, c.label);
+    return c;
+}
+
+const yesNo = async (head: string, intro: string[], initial = true) =>
+    (await choose(head, intro, [{ label: S().yes, value: true }, { label: S().no, value: false }], initial ? 0 : 1)).value;
+
+async function askLang(head: string, current: string): Promise<string> {
+    const codes = Object.keys(LANGS);
+    return (await choose(head, [], codes.map((c) => ({ label: LANGS[c]!.langName, value: c })), Math.max(0, codes.indexOf(current)))).value;
+}
+
+const PLAN_NAMES: Record<string, string> = { pro: 'Pro', max5x: 'Max 5x', max20x: 'Max 20x' };
+async function askPlan(head: string, current: string): Promise<string> {
+    const plans = Object.keys(PLANS);
+    const choices = plans.map((p) => ({ label: PLAN_NAMES[p] ?? p, detail: fill(S().perMonth, { price: '$' + PLANS[p] }), value: p }));
+    return (await choose(head, [], choices, Math.max(0, plans.indexOf(current)))).value;
+}
+
+async function askClaudeDirs(head: string, found: string[], configured: string[]): Promise<string[]> {
+    out('');
+    const picked = await checklist([head, paint('dim', S().claudeIntro)], S().checkKeys,
+        found.map((d) => ({ label: tilde(d), value: d, on: configured.includes(d) })));
+    answered(head, picked.map((c) => c.label).join(', '));
+    return picked.map((c) => c.value);
+}
+
+// How the data location reads in a menu or summary
+const whereText = (c: Config) => (c.remote ? `SSH  ${c.remote}` : c.syncDir ? tilde(c.syncDir) : S().thisMachine);
+
+// Where the data goes: a synced folder, another folder, an SSH server or this machine only.
+// Picking one clears the others, so the config never holds two places.
+async function askWhere(head: string, next: Config, folders: SyncFolder[]) {
+    type Where = { kind: 'folder'; path: string } | { kind: 'remote'; remote: string } | { kind: 'other' | 'ssh' | 'local' };
+    const choices: Choice<Where>[] = folders.map((f) => ({ label: f.name, detail: tilde(dataFolderIn(f.path)), value: { kind: 'folder', path: dataFolderIn(f.path) } }));
+    if (next.syncDir && !choices.some((c) => c.value.kind === 'folder' && c.value.path === next.syncDir))
+        choices.unshift({ label: S().currentFolder, detail: tilde(next.syncDir), value: { kind: 'folder', path: next.syncDir } });
+    if (next.remote) choices.unshift({ label: 'SSH', detail: next.remote, value: { kind: 'remote', remote: next.remote } });
+    choices.push(
+        { label: S().otherFolder, detail: S().otherFolderDetail, value: { kind: 'other' } },
+        { label: S().sshServer, detail: S().sshServerDetail, value: { kind: 'ssh' } },
+        { label: S().thisMachine, value: { kind: 'local' } },
+    );
+    // The current setting, else the first synced folder found, else this machine only
+    let initial = choices.findIndex((c) => (c.value.kind === 'folder' && c.value.path === next.syncDir) || (c.value.kind === 'remote' && !next.syncDir));
+    if (initial < 0) initial = folders.length ? 0 : choices.length - 1;
+    const set = (where: { syncDir?: string; remote?: string }) => {
+        delete next.syncDir;
+        delete next.remote;
+        Object.assign(next, where);
+        answered(head, whereText(next));
+    };
+    out('');
+    for (;;) {
+        const c = await select([head, paint('dim', S().whereIntro)], S().keys, choices, initial);
+        const v = c.value;
+        if (v.kind === 'folder') return set({ syncDir: v.path });
+        if (v.kind === 'remote') return set({ remote: v.remote });
+        if (v.kind === 'local') return set({});
+        // The typed exchange stays under the question's heading and is wiped once it ends either way
+        const scratch = track();
+        let answer: string | undefined;
+        try {
+            out(`${head}  ${paint('dim', '› ' + c.label)}`);
+            answer = v.kind === 'other' ? await askFolder() : await askRemote();
+        } finally {
+            scratch.erase();
+        }
+        if (answer) return set(v.kind === 'other' ? { syncDir: answer } : { remote: answer });
+        initial = choices.indexOf(c);
+    }
+}
+
+// A full folder path; empty goes back to the menu. A relative answer is almost always a slip ("yes", "n").
+async function askFolder(): Promise<string | undefined> {
+    for (;;) {
+        const answer = await input(S().askPath);
+        if (!answer) return undefined;
+        const dir = answer.replace(/^~(?=$|[\\/])/, os.homedir());
+        if (path.isAbsolute(dir)) return path.resolve(dir);
+        out(paint('yellow', fill(S().notAPath, { answer })));
+    }
+}
+
+// user@host:folder, tried at once; empty goes back to the menu
+async function askRemote(): Promise<string | undefined> {
+    for (;;) {
+        const remote = await input(S().askRemote);
+        if (!remote) return undefined;
+        const problem = remoteProblem(remote);
+        if (problem) {
+            out(paint('yellow', fill(problem === 'port' ? S().remotePort : S().remoteInvalid, { remote })));
+            continue;
+        }
+        for (;;) {
+            out(paint('dim', fill(S().connecting, { remote })));
+            try {
+                probe(remote);
+                ok(fill(S().connected, { remote }));
+                return remote;
+            } catch (e) {
+                bad(fill(S().connectFailed, { reason: (e as Error).message }));
+                const hint = sshHint((e as Error).message, remote, '');
+                if (hint) out(paint('dim', '  ' + hint));
+            }
+            const then = await select([], S().keys, [
+                { label: S().retry, value: 'retry' },
+                { label: S().saveAnyway, value: 'save' },
+                { label: S().back, value: 'back' },
+            ]);
+            if (then.value === 'save') return remote;
+            if (then.value === 'back') break;
+        }
+    }
+}
+
+// Free text with a default: Enter keeps the current value, and check() returns a complaint or nothing
+async function askText(head: string, intro: string[], question: string, current: string, check: (v: string) => string | undefined): Promise<string> {
+    const scratch = track();
+    let answer = current;
+    try {
+        out('');
+        out(head);
+        for (const l of intro) out(paint('dim', l));
+        for (;;) {
+            const typed = await input(question);
+            if (!typed) break;
+            const complaint = check(typed);
+            if (!complaint) {
+                answer = typed;
+                break;
+            }
+            out(paint('yellow', complaint));
+        }
+    } finally {
+        scratch.erase();
+    }
+    out('');
+    answered(head, answer);
+    return answer;
+}
+
+// ---------- setup
 
 async function setup() {
-    const S = L().setup;
     const runner = currentRunner();
-    if (opt.remove) {
-        const removed = [removeSchedule(), ...claudeSettingsFiles(settings.claudeDirs).filter(removeHook)].filter(Boolean);
-        return out(removed.length ? removed.map((w) => fill(S.removed, { what: w! })).join('\n') : S.nothingToRemove);
-    }
-    const interactive = !opt.yes && process.stdin.isTTY;
-    const rl = interactive ? readline.createInterface({ input: process.stdin, output: process.stdout }) : undefined;
+    const interactive = interactiveTerminal();
+    if (opt.remove) return removeAutomation(interactive);
+    out(paint('bold', fill(S().title, { version: pkg.version })));
+    const next: Config = { ...config };
+    const folders = syncFolders();
+    const foundClaude = [...new Set([...claudeDirs(next.claudeDirs), ...findClaudeDirs()])];
+
+    // [n/total] counts only the questions this run asks
+    const total = [!opt.lang, !opt['sync-dir'], foundClaude.length > 1, true, !opt['no-schedule'], !opt['no-hook']].filter(Boolean).length;
+    let step = 0;
+    const heading = (title: string) => paint('bold', `[${++step}/${total}] ${title}`);
+
+    let wantSchedule = !opt['no-schedule'];
+    let wantHook = !opt['no-hook'];
     try {
-        out(paint('bold', fill(S.title, { version: pkg.version })));
-        const next: Config = { ...config };
+        // Language first, so everything after it is in that language
+        if (opt.lang) next.lang = opt.lang;
+        else if (interactive) next.lang = await askLang(heading(S().stepLang), next.lang ?? 'en');
+        else next.lang ??= 'en';
+        setLang(next.lang);
 
         if (opt['sync-dir']) next.syncDir = path.resolve(opt['sync-dir']);
-        else {
-            const folders = syncFolders();
-            const proposal = next.syncDir ?? (folders[0] && dataFolderIn(folders[0]));
-            if (folders.length) out(fill(S.found, { list: folders.join(', ') }));
-            let chosen = proposal && yes(await ask(rl, fill(S.usePath, { path: proposal }))) ? proposal : undefined;
-            if (!chosen && rl) chosen = (await ask(rl, S.askPath)) || undefined;
-            if (chosen) next.syncDir = path.resolve(chosen);
-            else out(S.localOnly);
-        }
-        const langAnswer = opt.lang ?? (await ask(rl, fill(S.lang, { current: next.lang ?? 'en' })));
-        if (langAnswer && LANGS[langAnswer]) next.lang = langAnswer;
-        const planAnswer = await ask(rl, fill(S.plan, { current: next.plan ?? 'max5x' }));
-        if (planAnswer && PLANS[planAnswer]) next.plan = planAnswer;
-        next.plan ??= 'max5x';
-        // Several accounts keep separate folders (CLAUDE_CONFIG_DIR=~/.claude-work); read them all
-        const found = [...new Set([...claudeDirs(next.claudeDirs), ...findClaudeDirs()])];
-        if (found.length > 1) {
-            if (yes(await ask(rl, fill(S.claudeDirs, { list: found.join(', ') })))) next.claudeDirs = found;
-            else {
-                const chosen = parseDirs(await ask(rl, S.askClaudeDirs));
-                if (chosen.length) next.claudeDirs = chosen;
-            }
+        else if (interactive) await askWhere(heading(S().stepWhere), next, folders);
+        // without questions: keep the current place, else the first synced folder found
+        else if (!next.syncDir && !next.remote && folders[0]) next.syncDir = dataFolderIn(folders[0].path);
+
+        if (foundClaude.length > 1) {
+            const configured = next.claudeDirs?.length ? next.claudeDirs : foundClaude;
+            next.claudeDirs = interactive ? await askClaudeDirs(heading(S().stepClaude), foundClaude, configured) : configured;
         }
 
+        next.plan = interactive ? await askPlan(heading(S().stepPlan), next.plan ?? 'max5x') : (next.plan ?? 'max5x');
+
+        // Hook files depend on the Claude folders just chosen
+        const hookFiles = claudeSettingsFiles(claudeDirs(next.claudeDirs));
+        if (wantSchedule && interactive) wantSchedule = await yesNo(heading(fill(S().stepSchedule, { time: SCHEDULE_TIME })), [S().scheduleIntro]);
+        if (wantHook && interactive) wantHook = await yesNo(heading(S().stepHook), [fill(S().hookIntro, { file: hookFiles.map(tilde).join(', ') })]);
+
+        out('');
+        saveConfig(next);
+        config = next;
+        settings = resolveSettings();
+        ok(fill(S().saved, { file: configFile() }));
+        if ((wantSchedule || wantHook) && isEphemeral(runner)) out(S().npx);
+        else {
+            if (wantSchedule) {
+                const r = installSchedule(runner);
+                if (r.ok) ok(fill(S().scheduled, { what: r.what }));
+                else bad(fill(S().scheduleFailed, { reason: r.what }));
+            }
+            if (wantHook) for (const file of hookFiles) ok(fill(installHook(runner, file) ? S().hookAdded : S().hookKept, { file }));
+        }
+    } catch (e) {
+        if (!(e instanceof Cancelled)) throw e;
+        return out('\n' + S().cancelled);
+    }
+    out('\n' + S().firstSync);
+    const d = await data(true);
+    const file = dashboard(d);
+    out('\n' + (d.rows.length ? summary(d.rows) : L().noData));
+    out('\n' + fill(L().dashboard, { file }));
+    if (!interactive) return;
+    try {
+        if (await yesNo(paint('bold', S().openDashboard), [])) openFile(file);
+    } catch (e) {
+        if (!(e instanceof Cancelled)) throw e;
+    }
+}
+
+// setup --remove: shows what it will take away and asks first in a terminal
+async function removeAutomation(interactive: boolean) {
+    const hooks = claudeSettingsFiles(settings.claudeDirs).filter(hookInstalled);
+    const schedule = scheduleInstalled();
+    if (!schedule && !hooks.length) return out(S().nothingToRemove);
+    if (interactive) {
+        const items = [...(schedule ? [S().scheduleItem] : []), ...hooks.map((f) => fill(S().hookItem, { file: tilde(f) }))];
+        try {
+            if (!(await yesNo(paint('bold', S().removeTitle), items.map((i) => '· ' + i)))) return out(S().keptAll);
+        } catch (e) {
+            if (!(e instanceof Cancelled)) throw e;
+            return out(S().keptAll);
+        }
+    }
+    const removed = [removeSchedule(), ...hooks.filter(removeHook)].filter(Boolean);
+    for (const w of removed) ok(fill(S().removed, { what: w! }));
+}
+
+// ---------- cc-cost config in a terminal: pick a setting, answer its question, saved at once
+
+async function settingsMenu() {
+    let at = 0;
+    for (;;) {
+        const M = L().settingsMenu;
+        const items: Choice<string>[] = [
+            { label: M.lang, detail: LANGS[settings.lang]?.langName ?? settings.lang, value: 'lang' },
+            { label: M.where, detail: whereText(config), value: 'where' },
+            { label: M.claude, detail: settings.claudeDirs.map(tilde).join(', ') || '–', value: 'claude' },
+            { label: M.plan, detail: PLAN_NAMES[config.plan ?? 'max5x'] ?? config.plan, value: 'plan' },
+            { label: M.machine, detail: settings.machine, value: 'machine' },
+            { label: M.timezone, detail: settings.timezone, value: 'timezone' },
+            { label: M.anonymize, detail: config.anonymizeProjects ? S().yes : S().no, value: 'anonymize' },
+            { label: M.done, value: 'done' },
+        ];
+        let item: Choice<string>;
+        try {
+            out('');
+            item = await select([paint('bold', fill(M.title, { file: tilde(configFile()) }))], S().keys, items, at);
+        } catch (e) {
+            if (e instanceof Cancelled) return;
+            throw e;
+        }
+        if (item.value === 'done') return;
+        at = items.indexOf(item);
+        const head = paint('bold', item.label);
+        const next: Config = { ...config };
+        try {
+            if (item.value === 'lang') next.lang = await askLang(head, settings.lang);
+            else if (item.value === 'where') await askWhere(head, next, syncFolders());
+            else if (item.value === 'claude') {
+                const found = [...new Set([...claudeDirs(next.claudeDirs), ...findClaudeDirs()])];
+                next.claudeDirs = await askClaudeDirs(head, found, settings.claudeDirs);
+            } else if (item.value === 'plan') next.plan = await askPlan(head, config.plan ?? 'max5x');
+            else if (item.value === 'machine')
+                next.machine = await askText(head, [M.machineNote], fill(M.askMachine, { current: settings.machine }), settings.machine, () => undefined);
+            else if (item.value === 'timezone')
+                next.timezone = await askText(head, [], fill(M.askTimezone, { current: settings.timezone }), settings.timezone, (tz) => {
+                    try {
+                        new Intl.DateTimeFormat('en', { timeZone: tz });
+                        return undefined;
+                    } catch {
+                        return fill(M.badTimezone, { tz });
+                    }
+                });
+            else if (item.value === 'anonymize') next.anonymizeProjects = await yesNo(head, [M.anonymizeIntro], !!config.anonymizeProjects);
+        } catch (e) {
+            if (!(e instanceof Cancelled)) throw e;
+            continue;
+        }
         saveConfig(next);
         config = next;
         settings = resolveSettings();
         setLang(settings.lang);
-        out(fill(L().setup.saved, { file: configFile() }));
-
-        const wantSchedule = !opt['no-schedule'] && yes(await ask(rl, fill(S.schedule, { time: SCHEDULE_TIME })));
-        const hookFiles = claudeSettingsFiles(settings.claudeDirs);
-        const wantHook = !opt['no-hook'] && yes(await ask(rl, fill(S.hook, { file: hookFiles.join(', ') })));
-        if ((wantSchedule || wantHook) && isEphemeral(runner)) out(S.npx);
-        else {
-            if (wantSchedule) {
-                const r = installSchedule(runner);
-                out(fill(r.ok ? S.scheduled : S.scheduleFailed, r.ok ? { what: r.what } : { reason: r.what }));
-            }
-            if (wantHook) for (const file of hookFiles) out(fill(installHook(runner, file) ? S.hookAdded : S.hookKept, { file }));
-        }
-    } finally {
-        rl?.close();
     }
-    out('\n' + S.firstSync);
-    const d = await data(true);
-    out(fill(L().dashboard, { file: dashboard(d) }));
 }
 
 async function status() {
@@ -276,6 +535,7 @@ async function status() {
         version: pkg.version,
         config: configFile(),
         syncDir: settings.syncDir,
+        remote: config.remote || '',
         machine: settings.machine,
         machines: snaps.map((s) => ({ name: s.machine, updated: s.updated, days: new Set(s.rows.map((r) => r.d)).size })),
         claudeDirs: settings.claudeDirs,
@@ -286,16 +546,18 @@ async function status() {
     };
     if (opt.json) return out(JSON.stringify(info, null, 2));
     const when = (iso: string) => (iso ? new Date(iso).toLocaleString(lang() === 'tr' ? 'tr-TR' : 'en-US', { timeZone: settings.timezone }) : '–');
+    const mark = (on: boolean) => (on ? paint('green', '✓ ') + St.yes : paint('red', '✗ ') + St.no);
     const pairs: [string, string][] = [
         [St.version, info.version],
         [St.config, info.config + (fs.existsSync(info.config) ? '' : ' (–)')],
         [St.syncDir, info.syncDir],
+        [St.remote, info.remote || St.none],
         [St.machine, info.machine],
         [St.machines, info.machines.length ? info.machines.map((m) => fill(St.machineLine, { name: m.name, updated: when(m.updated), days: m.days })).join('\n' + ' '.repeat(0)) : St.none],
         [St.claudeDirs, info.claudeDirs.join('\n') || St.none],
         [St.retention, fill(St.retentionValue, { n: info.retentionDays })],
-        [St.scheduler, info.schedule ? St.yes : St.no],
-        [St.hook, info.hook ? St.yes : St.no],
+        [St.scheduler, mark(info.schedule)],
+        [St.hook, mark(info.hook)],
         [St.prices, `${info.prices.source}, ${info.prices.date.slice(0, 10)}`],
     ];
     const w = Math.max(...pairs.map(([k]) => k.length));
@@ -376,11 +638,14 @@ async function main() {
             const [key, value = ''] = rest.slice(1);
             if (!CONFIG_KEYS.includes(key as (typeof CONFIG_KEYS)[number]))
                 fail(fill(L().configUnknownKey, { key: String(key), keys: CONFIG_KEYS.join(', ') }));
+            const problem = key === 'remote' && value ? remoteProblem(value) : undefined;
+            if (problem) fail(fill(problem === 'port' ? L().setup.remotePort : L().setup.remoteInvalid, { remote: value }));
             const next: Record<string, unknown> = { ...config };
             next[key!] = key === 'anonymizeProjects' ? value === 'true' : key === 'syncDir' ? path.resolve(value) : key === 'claudeDirs' ? parseDirs(value) : value;
             saveConfig(next as Config);
             return out(fill(L().configSet, { key: key!, value: String(next[key!]) }));
         }
+        if (interactiveTerminal() && !opt.json) return settingsMenu();
         out(fill(L().configFile, { file: configFile() }));
         return out(JSON.stringify({ ...settings, languages: Object.keys(LANGS) }, null, 2));
     }

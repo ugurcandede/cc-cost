@@ -36,9 +36,14 @@ export function syncthingFolders(xml: string): string[] {
     return [...xml.matchAll(/<folder\b[^>]*?\spath="([^"]*)"/g)].map((m) => unescape(m[1]!).replace(/^~(?=$|[\\/])/, HOME));
 }
 
-// Sync-service folders on this machine, most likely first
-export function syncFolders(): string[] {
-    const found: string[] = [];
+// Sync-service folders on this machine, most likely first, with the service's name
+export interface SyncFolder {
+    name: string;
+    path: string;
+}
+export function syncFolders(): SyncFolder[] {
+    const found: SyncFolder[] = [];
+    const add = (name: string, ...paths: string[]) => found.push(...paths.map((p) => ({ name, path: p })));
     // Syncthing first: unlike iCloud Drive or OneDrive it is never there by default, so it was set up on purpose.
     // config.xml moved from the config to the state folder on Linux in Syncthing 1.27.
     const syncthingConfigs = [
@@ -49,7 +54,7 @@ export function syncFolders(): string[] {
     ];
     for (const f of syncthingConfigs) {
         try {
-            found.push(...syncthingFolders(fs.readFileSync(f, 'utf8')));
+            add('Syncthing', ...syncthingFolders(fs.readFileSync(f, 'utf8')));
         } catch {
             // no Syncthing, or not at this location
         }
@@ -62,26 +67,35 @@ export function syncFolders(): string[] {
     ];
     for (const f of dropboxInfo) {
         try {
-            for (const v of Object.values(JSON.parse(fs.readFileSync(f, 'utf8'))) as { path?: string }[]) if (v?.path) found.push(v.path);
+            for (const v of Object.values(JSON.parse(fs.readFileSync(f, 'utf8'))) as { path?: string }[]) if (v?.path) add('Dropbox', v.path);
         } catch {
             // no Dropbox, or not at this location
         }
     }
-    found.push(path.join(HOME, 'Dropbox'));
-    for (const v of [process.env.OneDrive, process.env.OneDriveConsumer, process.env.OneDriveCommercial]) if (v) found.push(v);
-    found.push(path.join(HOME, 'OneDrive'));
+    add('Dropbox', path.join(HOME, 'Dropbox'));
+    add('OneDrive', ...[process.env.OneDrive, process.env.OneDriveConsumer, process.env.OneDriveCommercial].filter((v): v is string => !!v));
+    add('OneDrive', path.join(HOME, 'OneDrive'));
     if (process.platform === 'darwin') {
-        found.push(path.join(HOME, 'Library', 'Mobile Documents', 'com~apple~CloudDocs'));
+        add('iCloud Drive', path.join(HOME, 'Library', 'Mobile Documents', 'com~apple~CloudDocs'));
         try {
-            for (const e of fs.readdirSync(path.join(HOME, 'Library', 'CloudStorage')))
-                found.push(path.join(HOME, 'Library', 'CloudStorage', e, e.startsWith('GoogleDrive-') ? 'My Drive' : ''));
+            for (const e of fs.readdirSync(path.join(HOME, 'Library', 'CloudStorage'))) {
+                // File Provider folders are named <Service>-<account>, e.g. GoogleDrive-me@gmail.com
+                const service = e.split('-')[0]!;
+                add(service === 'GoogleDrive' ? 'Google Drive' : service, path.join(HOME, 'Library', 'CloudStorage', e, service === 'GoogleDrive' ? 'My Drive' : ''));
+            }
         } catch {
             // no File Provider mounts
         }
     }
-    if (process.platform === 'win32') found.push(path.join(HOME, 'iCloudDrive'), 'G:\\My Drive');
-    found.push(path.join(HOME, 'Google Drive'));
-    return [...new Set(found.map((p) => path.resolve(p)))].filter(exists);
+    if (process.platform === 'win32') {
+        add('iCloud Drive', path.join(HOME, 'iCloudDrive'));
+        add('Google Drive', 'G:\\My Drive');
+    }
+    add('Google Drive', path.join(HOME, 'Google Drive'));
+    const seen = new Set<string>();
+    return found
+        .map((f) => ({ ...f, path: path.resolve(f.path) }))
+        .filter((f) => !seen.has(f.path) && seen.add(f.path) && exists(f.path));
 }
 
 // Where to keep the data inside a sync folder: reuse an existing cc-cost folder (including one
