@@ -32,20 +32,22 @@ test('plan from the login: Max, Pro, and a guess for Team', () => {
 });
 
 test('account id: a hash of the login ids, never the e-mail, the same on every machine', () => {
-    const a = detectAccount(claudeDir(max5x));
-    const again = detectAccount(claudeDir(max5x));
+    const a = detectAccount(claudeDir(max5x), 'pc');
+    const again = detectAccount(claudeDir(max5x), 'mac');
     assert.match(a.id, /^a[0-9a-f]{10}$/);
     assert.equal(a.id, again.id, 'same login in another folder or machine');
-    assert.notEqual(detectAccount(claudeDir({ ...max5x, organizationUuid: 'o2' })).id, a.id, 'another organization is another account');
+    assert.notEqual(detectAccount(claudeDir({ ...max5x, organizationUuid: 'o2' }), 'pc').id, a.id, 'another organization is another account');
     assert.equal(a.plan, 'max5x');
     assert.equal(a.folder, '.claude-work');
     assert.ok(!JSON.stringify(a).includes('example.com'));
 });
 
-test('a folder without a login stands for its own account', () => {
-    const a = detectAccount(claudeDir());
+test('a folder without a login stands for its own account, on its own machine', () => {
+    const a = detectAccount(claudeDir(), 'pc');
     assert.match(a.id, /^d[0-9a-f]{10}$/);
     assert.equal(a.plan, undefined);
+    assert.equal(detectAccount(claudeDir(), 'pc').id, a.id);
+    assert.notEqual(detectAccount(claudeDir(), 'mac').id, a.id, 'the same folder name on another machine is not assumed to be the same account');
 });
 
 test('scan tags rows, hours and limit events with the folder\'s account', async () => {
@@ -90,4 +92,12 @@ test('plan price: list price, own price, sponsored seat', () => {
     assert.equal(planPrice('teamPremium', 100), 100, 'an annual or negotiated price wins');
     assert.equal(planPrice('free'), 0);
     assert.equal(planPrice(undefined), undefined);
+});
+
+test('two unnamed accounts that share a folder name are told apart by their plan', () => {
+    const snap = (machine: string, id: string, plan: string): Snapshot => ({
+        ...emptySnapshot(machine, 'UTC'), updated: '2026-09-10T00:00:00Z', rows: [row('2026-09-10', id)], accounts: { [id]: { folder: '.claude', plan } },
+    });
+    const { rows } = priceRows([snap('pc', 'max', 'max5x'), snap('mac', 'team', 'teamPremium')], BUNDLED);
+    assert.deepEqual(rows.map((r) => r.accountName), ['claude (Max 5x)', 'claude (Team Premium)']);
 });

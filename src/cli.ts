@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { applyFilter, applyHourFilter, hourFilterable, priceRows, type Filter } from './aggregate.ts';
-import { CONFIG_KEYS, configFile, loadConfig, PLANS, saveConfig, type Config } from './config.ts';
+import { CONFIG_KEYS, configFile, loadConfig, PLAN_NAMES, PLANS, saveConfig, type Config } from './config.ts';
 import { writeDashboard } from './dashboard.ts';
 import { paint, setColor, table } from './format.ts';
 import { fill, L, lang, LANGS, setLang } from './i18n.ts';
@@ -39,6 +39,7 @@ const { values: opt, positionals } = parseArgs({
         until: { type: 'string' },
         last: { type: 'string' },
         machine: { type: 'string', multiple: true },
+        account: { type: 'string', multiple: true },
         project: { type: 'string', multiple: true },
         model: { type: 'string', multiple: true },
         session: { type: 'string', multiple: true },
@@ -112,6 +113,7 @@ function filter(): Filter {
         since: last ? localDay(last - 1) : date('--since', opt.since),
         until: date('--until', opt.until),
         machine: list(opt.machine),
+        account: list(opt.account),
         project: list(opt.project),
         model: list(opt.model),
         session: list(opt.session),
@@ -205,7 +207,9 @@ function emit(report: Report, json: unknown, empty: boolean) {
     out(empty ? L().noData : renderTable(report));
 }
 
-const machineMatch = (f: Filter) => (m: string) => !f.machine?.length || f.machine.some((w) => m.toLowerCase().includes(w.toLowerCase()));
+const matchesAny = (wanted: string[] | undefined) => (v: string) => !wanted?.length || wanted.some((w) => v.toLowerCase().includes(w.toLowerCase()));
+// Limit events kept by the machine and account filters
+const limitMatch = (f: Filter) => (l: { machine: string; accountName: string }) => matchesAny(f.machine)(l.machine) && matchesAny(f.account)(l.accountName);
 
 // A path under the home folder, shown from ~
 function tilde(p: string): string {
@@ -250,7 +254,6 @@ async function askLang(head: string, current: string): Promise<string> {
     return (await choose(head, [], codes.map((c) => ({ label: LANGS[c]!.langName, value: c })), Math.max(0, codes.indexOf(current)))).value;
 }
 
-const PLAN_NAMES: Record<string, string> = { pro: 'Pro', max5x: 'Max 5x', max20x: 'Max 20x' };
 async function askPlan(head: string, current: string): Promise<string> {
     const plans = Object.keys(PLANS);
     const choices = plans.map((p) => ({ label: PLAN_NAMES[p] ?? p, detail: fill(S().perMonth, { price: '$' + PLANS[p] }), value: p }));
@@ -588,7 +591,7 @@ async function main() {
         const d = await data(false);
         const f = filter();
         const rows = applyFilter(d.rows, f);
-        const limits = limitsInRange(d.limits, settings.timezone, f.since, f.until, machineMatch(f));
+        const limits = limitsInRange(d.limits, settings.timezone, f.since, f.until, limitMatch(f));
         const limit = count('--limit', opt.limit) ?? (['sessions', 'projects', 'blocks'].includes(cmd) ? 20 : undefined);
 
         if (PERIODS.includes(cmd as Period)) {
@@ -598,9 +601,10 @@ async function main() {
             const dim = cmd as Dimension;
             emit(dimensionReport(rows, dim, limit), dimensionJson(rows, dim, limit), !rows.length);
         } else if (cmd === 'plan') {
-            const p = planReport(rows, limits, { timezone: settings.timezone, plan: config.plan });
+            const p = planReport(rows, limits, { timezone: settings.timezone, plan: config.plan, accounts: d.accounts });
             emit(p.report, p.json, !rows.length);
-            if (!opt.json && !opt.csv && rows.length) out('\n' + p.notes.join('\n'));
+            // The account table follows the monthly one in the terminal; JSON carries both, CSV the monthly one
+            if (!opt.json && !opt.csv && rows.length) out('\n' + renderTable(p.accountsReport) + '\n\n' + p.notes.join('\n'));
         } else if (cmd === 'blocks') {
             if (!hourFilterable(f)) console.error(L().hourFilters);
             const hours = applyHourFilter(d.hours, f);

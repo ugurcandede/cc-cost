@@ -11,6 +11,7 @@ Commands:
   sync                          Sync this machine and update the dashboard
   daily | weekly | monthly      Cost per day, week (starting Monday) or month
   models | machines | projects  Cost per model, machine or project
+  accounts                      Cost per Claude account
   agents | skills | mcp         Cost by main thread vs subagents, by skill, by MCP server
   sessions                      Most expensive sessions
   blocks                        Usage in 5-hour windows
@@ -29,6 +30,7 @@ Filters:
   --until <date>     Until YYYY-MM-DD, inclusive
   --last <n>         Last n calendar days, including today
   --machine <name>   Only these machines (comma-separated, partial match)
+  --account <name>   Only these Claude accounts, by the name given in setup
   --project <name>   Only these projects
   --model <name>     Only these models, e.g. opus or fable
   --session <id>     Only these sessions (id prefix)
@@ -92,7 +94,7 @@ Docs and issues: {url}`,
         item: 'Item', total: 'Total', price: 'Input / Write 5m / Write 1h / Read / Output ($/MTok)',
         agent: 'Agent', skill: 'Skill', mcp: 'MCP server', effort: 'Effort', context: 'Context', readCost: 'Cache read $',
         days: 'Days', perMonth: 'Per 30 days', limitHits: 'Limit hits', start: 'Start', end: 'End', tokens: 'Tokens',
-        state: 'State',
+        state: 'State', account: 'Account', plan: 'Plan', planPrice: 'Plan $/month', multiple: '× plan',
     },
     item: { read: 'cache read', write: 'cache write', output: 'output', input: 'uncached input', web: 'web search' },
     ins: {
@@ -136,6 +138,10 @@ Docs and issues: {url}`,
         note: 'Anthropic does not publish plan limits in tokens, so no tool can tell which plan would have been enough. Rate-limit hits are the direct signal.',
         yours: 'Your plan ({plan}, ${price}/month): over this range the API equivalent is {multiple}× its price.',
         noPlan: 'Set your plan with: cc-cost config set plan max5x (pro, max5x, max20x)',
+        combined: 'Your {n} paid plans, ${price}/month together: over this range the API equivalent is {multiple}× what you pay.',
+        sponsored: 'sponsored',
+        sponsoredNote: 'Sponsored, so not in the multiple: {names}.',
+        unpricedNote: 'No plan known, so not in the multiple: {names}. Set one in cc-cost config, under Accounts.',
     },
     blocks: {
         active: 'active, {left} left',
@@ -292,6 +298,7 @@ Komutlar:
   sync                          Bu makineyi senkronla, dashboard'u güncelle
   daily | weekly | monthly      Günlük, haftalık (pazartesi başlar) veya aylık maliyet
   models | machines | projects  Model, makine veya projeye göre maliyet
+  accounts                      Claude hesabına göre maliyet
   agents | skills | mcp         Ana akış / subagent, skill ve MCP sunucusuna göre maliyet
   sessions                      En pahalı session'lar
   blocks                        5 saatlik pencerelerde kullanım
@@ -310,6 +317,7 @@ Filtreler:
   --until <tarih>    YYYY-MM-DD'ye kadar, dahil
   --last <n>         Bugün dahil son n takvim günü
   --machine <ad>     Sadece bu makineler (virgülle, kısmi eşleşme)
+  --account <ad>     Sadece bu Claude hesapları, setup'ta verilen adla
   --project <ad>     Sadece bu projeler
   --model <ad>       Sadece bu modeller, ör. opus veya fable
   --session <id>     Sadece bu session'lar (id başı)
@@ -373,7 +381,7 @@ Dokümantasyon ve hata bildirimi: {url}`,
         item: 'Kalem', total: 'Toplam', price: 'Girdi / Yazma 5dk / Yazma 1sa / Okuma / Çıktı ($/MTok)',
         agent: 'Agent', skill: 'Skill', mcp: 'MCP sunucusu', effort: 'Effort', context: 'Context', readCost: 'Cache okuma $',
         days: 'Gün', perMonth: '30 günde', limitHits: 'Limit aşımı', start: 'Başlangıç', end: 'Bitiş', tokens: 'Token',
-        state: 'Durum',
+        state: 'Durum', account: 'Hesap', plan: 'Plan', planPrice: 'Plan $/ay', multiple: '× plan',
     },
     item: { read: 'cache okuma', write: 'cache yazma', output: 'çıktı', input: 'cache\'siz girdi', web: 'web arama' },
     ins: {
@@ -417,6 +425,10 @@ Dokümantasyon ve hata bildirimi: {url}`,
         note: 'Anthropic plan limitlerini token cinsinden yayınlamıyor; hangi planın yeteceğini hiçbir araç söyleyemez. Doğrudan sinyal limit aşımları.',
         yours: 'Planın ({plan}, aylık ${price}): bu aralıktaki API karşılığı, plan fiyatının {multiple} katı.',
         noPlan: 'Planını ayarla: cc-cost config set plan max5x (pro, max5x, max20x)',
+        combined: 'Ücretli {n} planın, toplam aylık ${price}: bu aralıktaki API karşılığı, ödediğinin {multiple} katı.',
+        sponsored: 'sponsorlu',
+        sponsoredNote: 'Sponsorlu olduğu için katsayıya girmeyen: {names}.',
+        unpricedNote: 'Planı bilinmediği için katsayıya girmeyen: {names}. cc-cost config içinde Hesaplar\'dan ayarla.',
     },
     blocks: {
         active: 'aktif, {left} kaldı',

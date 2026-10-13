@@ -37,7 +37,7 @@ export async function sync(s: Settings): Promise<SyncResult> {
     const accounts: Record<string, AccountMeta> = {};
     const accountOf: Record<string, string> = {};
     for (const dir of dirs) {
-        const a = detectAccount(dir);
+        const a = detectAccount(dir, s.machine);
         accountOf[dir] = a.id;
         const given = s.accounts?.[a.id] ?? {};
         accounts[a.id] = Object.fromEntries(

@@ -1,3 +1,4 @@
+import { PLAN_NAMES } from './config.ts';
 import { priceFor, type Price, type PriceTable } from './pricing.ts';
 import { T, T_LEN, UNKNOWN, type AccountMeta, type HourRow, type LimitEvent, type Row, type Snapshot } from './types.ts';
 
@@ -42,6 +43,12 @@ export function accountsOf(snaps: Snapshot[]): Map<string, Account> {
             const merged = { ...seen, ...meta };
             out.set(id, { ...merged, id, label: accountLabel(id, merged), machines: [...new Set([...(seen?.machines ?? []), snap.machine])] });
         }
+    // Reports group by the name shown, so two accounts must never share one: unnamed folders often do
+    // (.claude on two machines). The plan, else the id, tells them apart.
+    const byLabel = new Map<string, Account[]>();
+    for (const a of out.values()) byLabel.set(a.label, [...(byLabel.get(a.label) ?? []), a]);
+    for (const same of byLabel.values())
+        if (same.length > 1) for (const a of same) a.label += ` (${(a.plan && PLAN_NAMES[a.plan]) || a.id.slice(0, 7)})`;
     return out;
 }
 

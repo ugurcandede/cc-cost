@@ -1,8 +1,8 @@
 import {
     agentOf, avgContext, byCost, cacheHitRatio, contextTokens, daysBetween, groupBy, modelLabel, repriceAs, totals, weekOf,
-    type MachineLimit, type PricedHour, type PricedRow, type Totals,
+    type Account, type MachineLimit, type PricedHour, type PricedRow, type Totals,
 } from './aggregate.ts';
-import { PLANS } from './config.ts';
+import { PLAN_NAMES, planPrice, PLANS } from './config.ts';
 import { int, paint, table, tokens, usd } from './format.ts';
 import { fill, L, lang } from './i18n.ts';
 import type { PriceTable } from './pricing.ts';
@@ -114,14 +114,15 @@ export function periodJson(rows: PricedRow[], period: Period, breakdown?: boolea
 
 // ---------- dimensions
 
-export type Dimension = 'models' | 'machines' | 'projects' | 'agents' | 'skills' | 'mcp' | 'sessions';
-export const DIMENSIONS: Dimension[] = ['models', 'machines', 'projects', 'agents', 'skills', 'mcp', 'sessions'];
+export type Dimension = 'models' | 'machines' | 'accounts' | 'projects' | 'agents' | 'skills' | 'mcp' | 'sessions';
+export const DIMENSIONS: Dimension[] = ['models', 'machines', 'accounts', 'projects', 'agents', 'skills', 'mcp', 'sessions'];
 const none = () => L().dash.none;
 // The main thread is "main" in data and filters, and a translated label on screen
 const agentLabel = (key: string) => (key === 'main' ? L().dash.main : key);
 const dimensionKey: Record<Dimension, (r: PricedRow) => string> = {
     models: modelLabel,
     machines: (r) => r.machine,
+    accounts: (r) => r.accountName,
     projects: (r) => r.p,
     agents: agentOf,
     skills: (r) => r.k ?? none(),
@@ -129,7 +130,7 @@ const dimensionKey: Record<Dimension, (r: PricedRow) => string> = {
     sessions: (r) => r.s,
 };
 const singular: Record<Dimension, string> = {
-    models: 'model', machines: 'machine', projects: 'project', agents: 'agent', skills: 'skill', mcp: 'mcp', sessions: 'session',
+    models: 'model', machines: 'machine', accounts: 'account', projects: 'project', agents: 'agent', skills: 'skill', mcp: 'mcp', sessions: 'session',
 };
 
 function dimensionGroups(rows: PricedRow[], dimension: Dimension, limit?: number) {
@@ -158,7 +159,7 @@ export function dimensionReport(rows: PricedRow[], dimension: Dimension, limit?:
             }),
         };
     const grand = totals(rows);
-    const name = { models: c.model, machines: c.machine, projects: c.project, agents: c.agent, skills: c.skill, mcp: c.mcp }[dimension];
+    const name = { models: c.model, machines: c.machine, accounts: c.account, projects: c.project, agents: c.agent, skills: c.skill, mcp: c.mcp }[dimension];
     const nums = (t: Totals): Cell[] => [at(t, T.calls), avgContext(t.t), at(t, T.read), at(t, T.output), t.cost, pctOf(t.cost, grand.cost)];
     return {
         cols: [col(name, 'text'), col(c.calls, 'int'), col(c.avgContext, 'tok'), col(c.cacheRead, 'tok'), col(c.output, 'tok'), col(c.cost, 'usd'), col(c.share, 'pct')],
@@ -192,6 +193,8 @@ export function summary(rows: PricedRow[]): string {
     return [
         paint('bold', fill(L_.total, { cost: usd(grand.cost), calls: int(at(grand, T.calls)), machines: grand.machines.size })),
         renderTable({ cols: [col(c.month, 'text'), col(c.cost, 'usd')], rows: byKey(groupBy(rows, periodKey.monthly)).map(([k, t]) => [k, t.cost]) }),
+        // one account says nothing; several are the first thing to tell apart
+        ...(new Set(rows.map((r) => r.account)).size > 1 ? [renderTable(costTable(c.account, byCost(groupBy(rows, dimensionKey.accounts))))] : []),
         renderTable(costTable(c.machine, byCost(groupBy(rows, dimensionKey.machines)))),
         renderTable(costTable(c.model, byCost(groupBy(rows, modelLabel)))),
         renderTable(costTable(c.project, byCost(groupBy(rows, dimensionKey.projects)).slice(0, 5))),
@@ -207,6 +210,7 @@ export function summaryJson(rows: PricedRow[]) {
         totals: toJson(totals(rows)),
         months: periodJson(rows, 'monthly').monthly,
         machines: dimensionJson(rows, 'machines').machines,
+        accounts: dimensionJson(rows, 'accounts').accounts,
         models: dimensionJson(rows, 'models').models,
         projects: dimensionJson(rows, 'projects').projects,
     };
@@ -361,21 +365,31 @@ export function insights({ rows, hours, limits, table: prices, timezone }: Insig
 // ---------- plan
 
 // Limit events filtered to the rows' date range, by local date
-export function limitsInRange(limits: MachineLimit[], timezone: string, since?: string, until?: string, machines?: (m: string) => boolean) {
+export function limitsInRange(limits: MachineLimit[], timezone: string, since?: string, until?: string, keep?: (l: MachineLimit) => boolean) {
     const clock = localClock(timezone);
     return limits.filter((l) => {
         const d = clock(l.ts).d;
-        return (!since || d >= since) && (!until || d <= until) && (!machines || machines(l.machine));
+        return (!since || d >= since) && (!until || d <= until) && (!keep || keep(l));
     });
 }
 
-export function planReport(rows: PricedRow[], limits: MachineLimit[], opts: { timezone: string; plan?: string }) {
+// What an account costs a month: its plan as the machines that read it recorded, the configured plan for
+// rows from before accounts were told apart, or unknown
+function accountPlan(id: string, accounts: Map<string, Account>, fallback?: string) {
+    const a = accounts.get(id);
+    const plan = a?.plan ?? (id === UNKNOWN ? fallback : undefined);
+    return { plan, price: planPrice(plan, a?.price) };
+}
+
+export function planReport(rows: PricedRow[], limits: MachineLimit[], opts: { timezone: string; plan?: string; accounts: Map<string, Account> }) {
     const c = L().col, P = L().plan;
     const dates = [...new Set(rows.map((r) => r.d))].sort();
     const first = dates[0] ?? '', last = dates[dates.length - 1] ?? '';
     const clock = localClock(opts.timezone);
     const hitsIn = (month?: string) => limits.filter((l) => l.status === 'rejected' && (!month || clock(l.ts).d.startsWith(month))).length;
-    const plans = Object.entries(PLANS);
+    // Team prices are per seat; they only mean something next to an account that is on Team
+    const onTeam = [...new Set(rows.map((r) => r.account))].some((id) => accountPlan(id, opts.accounts, opts.plan).plan?.startsWith('team'));
+    const plans = Object.entries(PLANS).filter(([k]) => onTeam || !k.startsWith('team'));
     const line = (label: string, days: number, cost: number, hits: number): Cell[] => {
         const perMonth = days ? (cost / days) * 30 : 0;
         return [label, days, cost, perMonth, ...plans.map(([, price]) => perMonth / price), hits];
@@ -390,7 +404,7 @@ export function planReport(rows: PricedRow[], limits: MachineLimit[], opts: { ti
     });
     const grand = totals(rows);
     const foot = line(c.total, first ? daysBetween(first, last) : 0, grand.cost, hitsIn());
-    const planName: Record<string, string> = { pro: 'Pro', max5x: 'Max 5x', max20x: 'Max 20x' };
+    const planName = PLAN_NAMES;
     const report: Report = {
         cols: [col(c.month, 'text'), col(c.days, 'int'), col(c.cost, 'usd'), col(c.perMonth, 'usd'),
             ...plans.map(([k, price]) => col(`${planName[k] ?? k} ($${price})`, 'x')), col(c.limitHits, 'int')],
@@ -398,9 +412,39 @@ export function planReport(rows: PricedRow[], limits: MachineLimit[], opts: { ti
         foot,
     };
     const perMonth = foot[3] as number;
-    const price = opts.plan ? PLANS[opts.plan] : undefined;
+
+    // Per account: each against its own plan. The total sets everything against what the paid plans
+    // cost together; a sponsored seat shows its cost but stays out of the multiple.
+    const perAccount = byCost(groupBy(rows, (r) => r.account)).map(([id, t]) => {
+        const ds = [...t.days].sort();
+        const days = daysBetween(ds[0]!, ds[ds.length - 1]!);
+        const per30 = (t.cost / days) * 30;
+        const { plan, price } = accountPlan(id, opts.accounts, opts.plan);
+        const hits = limits.filter((l) => l.status === 'rejected' && l.account === id).length;
+        const name = rows.find((r) => r.account === id)!.accountName;
+        return { id, name, plan, price, days, cost: t.cost, per30, multiple: price ? per30 / price : undefined, hits };
+    });
+    const paid = perAccount.filter((a) => a.price);
+    const paidPrice = paid.reduce((s, a) => s + a.price!, 0);
+    const paidPer30 = paid.reduce((s, a) => s + a.per30, 0);
+    const planLabel = (plan?: string) => (plan === 'free' ? P.sponsored : plan ? (planName[plan] ?? plan) : '–');
+    const accountsReport: Report = {
+        cols: [col(c.account, 'text'), col(c.plan, 'text'), col(c.planPrice, 'usd'), col(c.days, 'int'), col(c.cost, 'usd'), col(c.perMonth, 'usd'),
+            col(c.multiple, 'x'), col(c.limitHits, 'int')],
+        rows: perAccount.map((a) => [a.name, planLabel(a.plan), a.price ?? '–', a.days, a.cost, a.per30, a.multiple ?? '–', a.hits]),
+        foot: [c.total, '', paidPrice, foot[1] as number, grand.cost, perMonth, paidPrice ? paidPer30 / paidPrice : '–', foot[foot.length - 1] as number],
+    };
+
+    const unpriced = perAccount.filter((a) => a.price === undefined);
+    const sponsored = perAccount.filter((a) => a.price === 0);
     const notes = [
-        price ? fill(P.yours, { plan: planName[opts.plan!] ?? opts.plan!, price, multiple: (perMonth / price).toFixed(1) }) : P.noPlan,
+        paid.length === 1
+            ? fill(P.yours, { plan: planLabel(paid[0]!.plan), price: paid[0]!.price!, multiple: paid[0]!.multiple!.toFixed(1) })
+            : paid.length
+              ? fill(P.combined, { n: paid.length, price: paidPrice, multiple: (paidPer30 / paidPrice).toFixed(1) })
+              : P.noPlan,
+        ...(sponsored.length ? [fill(P.sponsoredNote, { names: sponsored.map((a) => a.name).join(', ') })] : []),
+        ...(unpriced.length && paid.length ? [fill(P.unpricedNote, { names: unpriced.map((a) => a.name).join(', ') })] : []),
         paint('dim', P.note),
     ];
     const json = {
@@ -408,8 +452,13 @@ export function planReport(rows: PricedRow[], limits: MachineLimit[], opts: { ti
         total: { days: foot[1], cost: round(grand.cost), per30Days: round(perMonth), limitHits: foot[foot.length - 1] },
         multiples: Object.fromEntries(plans.map(([k, p]) => [k, round(perMonth / p)])),
         plan: opts.plan ?? null,
+        accounts: perAccount.map((a) => ({
+            account: a.name, plan: a.plan ?? null, price: a.price ?? null, days: a.days, cost: round(a.cost), per30Days: round(a.per30),
+            multiple: a.multiple === undefined ? null : round(a.multiple), limitHits: a.hits,
+        })),
+        paid: { price: paidPrice, per30Days: round(paidPer30), multiple: paidPrice ? round(paidPer30 / paidPrice) : null },
     };
-    return { report, notes, json };
+    return { report, accountsReport, notes, json };
 }
 
 // ---------- 5-hour blocks
@@ -422,41 +471,52 @@ export function blocksReport(hours: PricedHour[], limits: MachineLimit[], opts: 
     const index = (d: string, h: number) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10), h) / 36e5;
     const label = (i: number) => new Date(i * 36e5).toISOString().slice(0, 13).replace('T', ' ') + ':00';
 
-    const byHour = new Map<number, { cost: number; calls: number; tokens: number }>();
-    for (const h of hours) {
-        const k = index(h.d, h.h);
-        const acc = byHour.get(k) ?? { cost: 0, calls: 0, tokens: 0 };
-        acc.cost += h.cost;
-        acc.calls += h.t[T.calls] ?? 0;
-        acc.tokens += contextTokens(h.t) + (h.t[T.output] ?? 0);
-        byHour.set(k, acc);
+    // Every account has its own windows and its own limits, so each gets its own timeline
+    type Block = { account: string; name: string; start: number; cost: number; calls: number; tokens: number; hits: number };
+    const blocks: Block[] = [];
+    for (const account of new Set(hours.map((h) => h.account))) {
+        const own = hours.filter((h) => h.account === account);
+        const byHour = new Map<number, { cost: number; calls: number; tokens: number }>();
+        for (const h of own) {
+            const k = index(h.d, h.h);
+            const acc = byHour.get(k) ?? { cost: 0, calls: 0, tokens: 0 };
+            acc.cost += h.cost;
+            acc.calls += h.t[T.calls] ?? 0;
+            acc.tokens += contextTokens(h.t) + (h.t[T.output] ?? 0);
+            byHour.set(k, acc);
+        }
+        const mine: Block[] = [];
+        for (const k of [...byHour.keys()].sort((a, b) => a - b)) {
+            let b = mine[mine.length - 1];
+            if (!b || k >= b.start + 5) mine.push((b = { account, name: own[0]!.accountName, start: k, cost: 0, calls: 0, tokens: 0, hits: 0 }));
+            const v = byHour.get(k)!;
+            b.cost += v.cost;
+            b.calls += v.calls;
+            b.tokens += v.tokens;
+        }
+        for (const l of limits) {
+            if (l.status !== 'rejected' || l.account !== account) continue;
+            const k = clock(l.ts), i = index(k.d, k.h);
+            const b = mine.find((x) => i >= x.start && i < x.start + 5);
+            if (b) b.hits++;
+        }
+        blocks.push(...mine);
     }
-    const blocks: { start: number; cost: number; calls: number; tokens: number; hits: number }[] = [];
-    for (const k of [...byHour.keys()].sort((a, b) => a - b)) {
-        let b = blocks[blocks.length - 1];
-        if (!b || k >= b.start + 5) blocks.push((b = { start: k, cost: 0, calls: 0, tokens: 0, hits: 0 }));
-        const v = byHour.get(k)!;
-        b.cost += v.cost;
-        b.calls += v.calls;
-        b.tokens += v.tokens;
-    }
-    for (const l of limits) {
-        if (l.status !== 'rejected') continue;
-        const k = clock(l.ts), i = index(k.d, k.h);
-        const b = blocks.find((x) => i >= x.start && i < x.start + 5);
-        if (b) b.hits++;
-    }
+    blocks.sort((a, b) => a.start - b.start || a.name.localeCompare(b.name));
+    const several = new Set(blocks.map((b) => b.account)).size > 1;
     const now = clock((opts.now ?? new Date()).toISOString());
     const nowAt = index(now.d, now.h) + now.min / 60;
     const shown = opts.limit ? blocks.slice(-opts.limit) : blocks;
+    const sum = (k: 'calls' | 'tokens' | 'cost' | 'hits') => shown.reduce((a, b) => a + b[k], 0);
     return {
-        cols: [col(c.start, 'text'), col(c.end, 'text'), col(c.calls, 'int'), col(c.tokens, 'tok'), col(c.cost, 'usd'), col(c.limitHits, 'int'), col(c.state, 'text')],
+        cols: [...(several ? [col(c.account, 'text')] : []), col(c.start, 'text'), col(c.end, 'text'), col(c.calls, 'int'), col(c.tokens, 'tok'),
+            col(c.cost, 'usd'), col(c.limitHits, 'int'), col(c.state, 'text')],
         rows: shown.map((b) => {
             const left = b.start + 5 - nowAt;
             const active = nowAt >= b.start && left > 0;
             const state = active ? fill(L().blocks.active, { left: `${Math.floor(left)}h ${Math.round((left % 1) * 60)}m` }) : '';
-            return [label(b.start), label(b.start + 5), b.calls, b.tokens, b.cost, b.hits, state];
+            return [...(several ? [b.name] : []), label(b.start), label(b.start + 5), b.calls, b.tokens, b.cost, b.hits, state];
         }),
-        foot: [c.total, '', shown.reduce((a, b) => a + b.calls, 0), shown.reduce((a, b) => a + b.tokens, 0), shown.reduce((a, b) => a + b.cost, 0), shown.reduce((a, b) => a + b.hits, 0), ''],
+        foot: [...(several ? [c.total, ''] : [c.total]), '', sum('calls'), sum('tokens'), sum('cost'), sum('hits'), ''],
     };
 }

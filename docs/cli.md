@@ -13,6 +13,7 @@ cc-cost daily --breakdown        # per-model rows under each period
 
 cc-cost models                   # cost per model; fast mode shows as <model>-fast
 cc-cost machines                 # cost per machine
+cc-cost accounts                 # cost per Claude account
 cc-cost projects                 # cost per git repository
 cc-cost sessions                 # most expensive sessions (20 by default)
 cc-cost agents                   # main thread vs each subagent type
@@ -20,8 +21,9 @@ cc-cost skills                   # calls Claude Code attributes to a skill
 cc-cost mcp                      # calls Claude Code attributes to an MCP server
 
 cc-cost insights                 # overview, cache, context size, attribution, models, busiest times, limits
-cc-cost plan                     # per month: API equivalent, per-30-day rate, × Pro / Max 5x / Max 20x, limit hits
-cc-cost blocks                   # 5-hour windows, the active one with time left
+cc-cost plan                     # per month: API equivalent, per-30-day rate, × each plan, limit hits; then per
+                                 # account against its own plan, and all of them against the paid plans together
+cc-cost blocks                   # 5-hour windows, the active one with time left; one timeline per account
 
 cc-cost report                   # write the dashboard and open it in the browser
 cc-cost report --location        # write it and print its path, without opening it
@@ -54,6 +56,7 @@ Every report accepts them; each takes a comma-separated list or can be repeated.
 | `--until <YYYY-MM-DD>` | Days up to this date, inclusive |
 | `--last <n>` | The last n calendar days, today included |
 | `--machine <name>` | Machines whose name contains it |
+| `--account <name>` | Claude accounts whose name (given in setup, else the folder's) contains it |
 | `--project <name>` | Projects whose name contains it |
 | `--model <name>` | Models whose id contains it: `opus`, `fable-5-1`, `fast` |
 | `--session <id>` | Sessions whose id starts with it |

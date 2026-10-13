@@ -21,6 +21,10 @@ export interface Config {
 // price goes into the account's own price.
 export const PLANS: Record<string, number> = { pro: 20, max5x: 100, max20x: 200, teamStandard: 25, teamPremium: 125 };
 
+export const PLAN_NAMES: Record<string, string> = {
+    pro: 'Pro', max5x: 'Max 5x', max20x: 'Max 20x', teamStandard: 'Team Standard', teamPremium: 'Team Premium',
+};
+
 // $ a month for an account: its own price, its plan's, 0 for a sponsored seat, or unknown
 export const planPrice = (plan?: string, price?: number): number | undefined =>
     price ?? (plan === 'free' ? 0 : plan ? PLANS[plan] : undefined);

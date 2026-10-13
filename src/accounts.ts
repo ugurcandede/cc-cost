@@ -30,7 +30,7 @@ function loginFile(dir: string): string | undefined {
     return candidates.find((f) => fs.existsSync(f));
 }
 
-export function detectAccount(dir: string): Detected {
+export function detectAccount(dir: string, machine: string): Detected {
     const folder = path.basename(path.resolve(dir));
     let o: OAuthAccount | undefined;
     try {
@@ -39,8 +39,9 @@ export function detectAccount(dir: string): Detected {
     } catch {
         // unreadable or half-written: fall back to the folder
     }
-    // Without a login (an API key, or never signed in) the folder stands for the account
-    if (!o?.accountUuid) return { id: 'd' + hash(folder), folder };
+    // Without a login (an API key, or never signed in) the folder stands for the account. Nothing tells
+    // whether ".claude" on two machines is one account, so it is not merged across machines.
+    if (!o?.accountUuid) return { id: 'd' + hash(`${machine}|${folder}`), folder };
     return { id: 'a' + hash(`${o.accountUuid}|${o.organizationUuid ?? ''}`), plan: planOf(o), folder };
 }
 
