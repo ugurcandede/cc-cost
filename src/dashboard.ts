@@ -211,6 +211,7 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 
 <div class="filters" role="group" aria-label="${esc(D.timeRange)}" data-t-aria="timeRange">
   <button data-days="1" ${text('today')}</button>
+  <button data-days="-1" ${text('yesterday')}</button>
   <button data-days="7" ${text('last7')}</button>
   <button data-days="30" aria-pressed="true" ${text('last30')}</button>
   <button data-days="90" ${text('last90')}</button>
@@ -331,7 +332,7 @@ const modelHue = (m) => hue(ORDER.indexOf(m) < 0 ? 8 : ORDER.indexOf(m) + 1);
 const ALL = [...new Set(ROWS.map(r => r.d))].sort();
 const MIN = ALL[0] || iso(Date.now()), MAX = ALL[ALL.length - 1] || iso(Date.now());
 
-let days = 30;        // preset: 1 = today, 0 = all
+let days = 30;        // preset: 1 = today, -1 = yesterday, 0 = all
 let custom = null;    // {from, to}; overrides the preset while set
 const sel = { machine: '', project: '', model: '' };
 let groupBy = 'model';
@@ -340,6 +341,7 @@ let groupBy = 'model';
 function bounds() {
   if (custom) return custom;
   if (!days) return { from: MIN, to: MAX };
+  if (days === -1) { const d = iso(Date.now() - DAY); return { from: d, to: d }; }
   return { from: iso(Date.now() - (days - 1) * DAY), to: iso(Date.now()) };
 }
 
@@ -363,7 +365,7 @@ function calendarSpan(dates) {
 function rangeLabel(dates) {
   if (custom) return custom.from + ' → ' + custom.to;
   if (!days) return fill(L.allRecords, { n: dates.length });
-  return days === 1 ? L.today : fill(L.lastDays, { n: days });
+  return days === 1 ? L.today : days === -1 ? L.yesterday : fill(L.lastDays, { n: days });
 }
 
 function sumBy(rs, key) {
