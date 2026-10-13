@@ -1,8 +1,5 @@
 # A tour of cc-cost
 
-Everything below is the demo's sample data (`scripts/demo`): two machines, a Max 5x account and a Team
-seat, 30 days of made-up usage. Nothing here is a real account.
-
 ## One file, every machine
 
 `cc-cost report` opens `dashboard.html`: a single file in the shared folder, no server, nothing to

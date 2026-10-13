@@ -19,7 +19,7 @@
     <img src="docs/assets/dashboard-light.png" alt="The cc-cost dashboard: the last 30 days across two machines and two Claude accounts, daily cost stacked by model" width="800">
   </picture>
   <br>
-  <sub>The dashboard, on the demo's sample data. <a href="docs/screenshots.md">A tour of every panel and report</a></sub>
+  <sub><a href="docs/screenshots.md">A tour of every panel and report</a></sub>
 </p>
 
 ## Quick start
@@ -120,8 +120,7 @@ cc-cost insights --lang tr        # interface language: en (default) or tr
   </tr>
 </table>
 
-[docs/screenshots.md](docs/screenshots.md) walks through every panel and terminal report. The images
-come from the demo's sample data (`scripts/demo`), not from a real account.
+[docs/screenshots.md](docs/screenshots.md) walks through every panel and terminal report.
 
 ## Layout
 
