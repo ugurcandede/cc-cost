@@ -65,6 +65,14 @@ complete one undercounts output by around 6%.
 - Subagent calls are grouped by subagent type (`Explore`, `general-purpose`, …); everything else is
   `main`. Skill and MCP attribution come from the fields Claude Code writes on each call.
 
+## Accounts
+
+Every Claude Code folder is logged in to one account, recorded in its `.claude.json`. cc-cost tags each
+call with a hash of that login's account and organization ids, so one account adds up across machines and
+folders, and two accounts on one machine stay apart. Transcripts don't record the account themselves: a
+folder's calls go to the account logged in there when they are scanned. Rate-limit events and 5-hour
+blocks are per account.
+
 ## The archive
 
 Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default; cc-cost reads the setting).

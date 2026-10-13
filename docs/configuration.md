@@ -13,11 +13,13 @@ a terminal; `cc-cost config set <key> <value>` changes one. The file is
 | `machine` | hostname | Name this machine appears under |
 | `lang` | `en` | Interface language: `en` or `tr` |
 | `timezone` | system zone | IANA zone that decides where one day ends |
-| `plan` | `max5x` | `pro`, `max5x` or `max20x`; the dashboard's plan multiple and `plan` use it |
+| `plan` | `max5x` | Plan for usage that belongs to no account (synced before accounts were told apart); each account has its own, below |
 | `anonymizeProjects` | `false` | `true` stores a hash of each project name instead of the name |
 | `pricing` | | Price overrides, below. Edit the file for this one |
 | `remote` | | `user@host:path` of a server to share through over SSH; see [below](#your-own-server-over-ssh-raspberry-pi-home-server-vps) |
 | `claudeDirs` | `~/.claude`, `~/.config/claude` | Claude Code data folders to read, one per account; comma-separated with `config set`. Overrides `CLAUDE_CONFIG_DIR` |
+| `accounts` | | Name, plan and price per Claude account; set in `setup` or `cc-cost config` → Claude accounts |
+| `unassigned` | | The account this machine's usage from before accounts were told apart belongs to |
 
 Command-line flags win over the file for a single run: `--sync-dir`, `--lang`, `--tz`.
 
@@ -139,13 +141,37 @@ finds the `~/.claude*` folders and offers to read them all, and adds the Session
 run `setup` again for the hooks. The list wins over `CLAUDE_CONFIG_DIR` on purpose: a hook started from
 one account's session inherits that account's variable and would otherwise sync only that account.
 
+### Accounts and plans
+
+cc-cost tells accounts apart by the login Claude Code keeps in `.claude.json` (`~/.claude.json` for
+`~/.claude`, inside the folder for any other), so the same account counts as one on every machine: a
+Team seat on a Mac and the same seat in `~/.claude-work` on a PC add up. A folder without a login, such
+as one used with an API key, is an account of its own on its own machine.
+
+`setup` asks each account for a name and a plan. The plan found in the login is preselected: Pro and Max
+are named there outright; for Team the login does not say which seat or what it costs, so pick Team
+Premium ($125 a month), Team Standard ($25), **Sponsored / free** (a seat someone else pays for: its cost
+shows, but it stays out of the plan multiple), or **Another price…** for annual billing or a negotiated
+price. Change them later in `cc-cost config` → Claude accounts.
+
+Reports can show the accounts together or one at a time:
+
+- `cc-cost accounts` lists the cost per account, and every report takes `--account <name>`.
+- `cc-cost plan` sets each account against its own plan, then all of them against the paid plans
+  together: what you pay in total.
+- `cc-cost blocks` and the rate-limit hits are per account, since every subscription has its own limits.
+
+Usage synced before an account was known (cc-cost 0.1 and earlier) has none. `setup` asks whose it is
+on each machine; until then it shows as `(unknown)` and is priced against the `plan` setting.
+
 ## Privacy
 
 A snapshot contains, per day, project, session, model and attribution: token counts, call counts, the
 largest context and a context-size histogram. It also holds session ids with their first and last
 timestamps and the rate-limit events Claude Code recorded. It never contains prompts, answers, code,
 file names or paths; a project is the name of its repository folder, or a hash of it with
-`anonymizeProjects`.
+`anonymizeProjects`. An account is a hash of the ids in its login, with the name and plan you gave it;
+the e-mail address and name in `.claude.json` are never read into a snapshot.
 
 Reports make at most two network requests a day: the public pricing page, and the npm registry to see
 whether a newer cc-cost is out. Neither sends anything about your usage. `--offline` turns both off;

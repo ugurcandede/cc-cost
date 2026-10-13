@@ -5,8 +5,9 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { applyFilter, applyHourFilter, hourFilterable, priceRows, type Filter } from './aggregate.ts';
-import { CONFIG_KEYS, configFile, loadConfig, PLAN_NAMES, PLANS, saveConfig, type Config } from './config.ts';
+import { detectAccount, type Detected } from './accounts.ts';
+import { accountLabel, accountsOf, applyFilter, applyHourFilter, hourFilterable, priceRows, type Filter } from './aggregate.ts';
+import { CONFIG_KEYS, configFile, loadConfig, PLAN_NAMES, planPrice, PLANS, saveConfig, type Config } from './config.ts';
 import { writeDashboard } from './dashboard.ts';
 import { paint, setColor, table } from './format.ts';
 import { fill, L, lang, LANGS, setLang } from './i18n.ts';
@@ -23,7 +24,7 @@ import {
     claudeSettingsFiles, currentRunner, dataFolderIn, hookInstalled, installHook, installSchedule, isEphemeral, removeHook,
     removeSchedule, SCHEDULE_TIME, scheduleInstalled, syncFolders, type SyncFolder,
 } from './setup.ts';
-import { loadAll } from './snapshot.ts';
+import { loadAll, loadOwn } from './snapshot.ts';
 import { installMethod, isNewer, latestVersion, updateCommand } from './update.ts';
 import { dashboardPath, sync, type Settings } from './sync.ts';
 
@@ -254,12 +255,6 @@ async function askLang(head: string, current: string): Promise<string> {
     return (await choose(head, [], codes.map((c) => ({ label: LANGS[c]!.langName, value: c })), Math.max(0, codes.indexOf(current)))).value;
 }
 
-async function askPlan(head: string, current: string): Promise<string> {
-    const plans = Object.keys(PLANS);
-    const choices = plans.map((p) => ({ label: PLAN_NAMES[p] ?? p, detail: fill(S().perMonth, { price: '$' + PLANS[p] }), value: p }));
-    return (await choose(head, [], choices, Math.max(0, plans.indexOf(current)))).value;
-}
-
 async function askClaudeDirs(head: string, found: string[], configured: string[]): Promise<string[]> {
     out('');
     const picked = await checklist([head, paint('dim', S().claudeIntro)], S().checkKeys,
@@ -267,6 +262,90 @@ async function askClaudeDirs(head: string, found: string[], configured: string[]
     answered(head, picked.map((c) => c.label).join(', '));
     return picked.map((c) => c.value);
 }
+
+// ---------- accounts
+
+type AccountChoice = NonNullable<Config['accounts']>[string];
+const planText = (a: AccountChoice | undefined) =>
+    !a?.plan && a?.price === undefined ? '–' : a.plan === 'free' ? S().sponsored : [a.plan && (PLAN_NAMES[a.plan] ?? a.plan), a.price !== undefined && '$' + a.price].filter(Boolean).join(' · ');
+
+// The Claude accounts behind the given folders, as the login in each says, with the names already given
+// to them here or on another machine
+function accountsIn(dirs: string[], machine: string, syncDir: string) {
+    const known = accountsOf(loadAll(syncDir));
+    const seen = new Map<string, Detected & { dir: string; name: string }>();
+    for (const dir of dirs) {
+        const a = detectAccount(dir, machine);
+        if (!seen.has(a.id)) seen.set(a.id, { ...a, dir, name: config.accounts?.[a.id]?.name ?? known.get(a.id)?.name ?? accountLabel(a.id, { folder: a.folder }) });
+    }
+    return [...seen.values()];
+}
+
+// Name, then plan. The plan found in the login is preselected; Team seats, sponsored ones and other
+// prices are the user's to say, since the login does not tell.
+async function askAccount(head: string, a: Detected & { dir: string; name: string }, current: AccountChoice | undefined): Promise<AccountChoice> {
+    const found = a.plan ? PLAN_NAMES[a.plan] ?? a.plan : S().noPlanFound;
+    const name = await askText(head, [fill(S().accountIntro, { plan: found })], fill(S().askName, { current: a.name }), a.name, () => undefined);
+    type Pick = { plan?: string; custom?: true };
+    const choices: Choice<Pick>[] = [
+        ...['pro', 'max5x', 'max20x', 'teamPremium', 'teamStandard'].map((p) => ({
+            label: PLAN_NAMES[p]!,
+            detail: fill(S().perMonth, { price: '$' + PLANS[p] }) + (p === a.plan ? '  ·  ' + S().detected : ''),
+            value: { plan: p },
+        })),
+        { label: S().sponsored, detail: S().sponsoredDetail, value: { plan: 'free' } },
+        { label: S().customPrice, detail: S().customPriceDetail, value: { custom: true } },
+    ];
+    const plan = current?.plan ?? a.plan;
+    const initial = current?.price !== undefined ? choices.length - 1 : Math.max(0, choices.findIndex((c) => c.value.plan === plan));
+    const planHead = paint('bold', fill(S().accountPlan, { name }));
+    for (;;) {
+        out('');
+        const c = await select([planHead], S().keys, choices, initial);
+        if (!c.value.custom) {
+            answered(planHead, c.label);
+            return { name, plan: c.value.plan };
+        }
+        // An own price keeps the plan it is a price of, for the label
+        const scratch = track();
+        let price: number | undefined;
+        try {
+            out(`${planHead}  ${paint('dim', '› ' + c.label)}`);
+            for (;;) {
+                const typed = (await input(S().askPrice)).replace(/^\$/, '').replace(',', '.');
+                if (!typed) break;
+                if (/^\d+(\.\d+)?$/.test(typed)) {
+                    price = Number(typed);
+                    break;
+                }
+                out(paint('yellow', fill(S().badPrice, { value: typed })));
+            }
+        } finally {
+            scratch.erase();
+        }
+        if (price !== undefined) {
+            const chosen = { name, plan, price };
+            answered(planHead, planText(chosen));
+            return chosen;
+        }
+    }
+}
+
+// Rows synced before accounts were told apart: one of the accounts, or none ("(unknown)")
+async function askUnassigned(head: string, days: number, accounts: { id: string; name: string }[], current?: string): Promise<string | undefined> {
+    const choices: Choice<string>[] = [
+        ...accounts.map((a) => ({ label: a.name, value: a.id })),
+        { label: S().keepUnknown, detail: S().keepUnknownDetail, value: '' },
+    ];
+    const at = choices.findIndex((c) => c.value === (current ?? ''));
+    return (await choose(head, [fill(S().unassignedIntro, { n: days })], choices, at < 0 ? choices.length - 1 : at)).value || undefined;
+}
+
+// Days in this machine's own snapshot without an account
+const unassignedDays = (syncDir: string, machine: string) =>
+    new Set(loadOwn(syncDir, machine, settings.timezone).rows.filter((r) => !r.ac).map((r) => r.d)).size;
+
+const localSyncDir = (c: Config) => path.resolve(c.syncDir ?? path.join(configDir(), 'data'));
 
 // How the data location reads in a menu or summary
 const whereText = (c: Config) => (c.remote ? `SSH  ${c.remote}` : c.syncDir ? tilde(c.syncDir) : S().thisMachine);
@@ -394,8 +473,9 @@ async function setup() {
     const folders = syncFolders();
     const foundClaude = [...new Set([...claudeDirs(next.claudeDirs), ...findClaudeDirs()])];
 
-    // [n/total] counts only the questions this run asks
-    const total = [!opt.lang, !opt['sync-dir'], foundClaude.length > 1, true, !opt['no-schedule'], !opt['no-hook']].filter(Boolean).length;
+    // [n/total] counts only the questions this run asks; the account steps are counted for every folder
+    // found until the user picks the folders, then for the picked ones
+    let total = [!opt.lang, !opt['sync-dir'], foundClaude.length > 1, !opt['no-schedule'], !opt['no-hook']].filter(Boolean).length + Math.max(1, foundClaude.length);
     let step = 0;
     const heading = (title: string) => paint('bold', `[${++step}/${total}] ${title}`);
 
@@ -418,7 +498,20 @@ async function setup() {
             next.claudeDirs = interactive ? await askClaudeDirs(heading(S().stepClaude), foundClaude, configured) : configured;
         }
 
-        next.plan = interactive ? await askPlan(heading(S().stepPlan), next.plan ?? 'max5x') : (next.plan ?? 'max5x');
+        if (interactive) {
+            const machine = next.machine ?? defaultMachine();
+            const syncDir = localSyncDir(next);
+            const accounts = accountsIn(claudeDirs(next.claudeDirs), machine, syncDir);
+            const days = unassignedDays(syncDir, machine);
+            total += accounts.length - Math.max(1, foundClaude.length) + (days && accounts.length ? 1 : 0);
+            next.accounts = { ...next.accounts };
+            for (const a of accounts) next.accounts[a.id] = await askAccount(heading(fill(S().stepAccount, { folder: tilde(a.dir) })), a, next.accounts[a.id]);
+            if (days && accounts.length) {
+                const owner = await askUnassigned(heading(S().stepUnassigned), days, accounts.map((a) => ({ id: a.id, name: next.accounts![a.id]!.name! })), next.unassigned);
+                if (owner) next.unassigned = owner;
+                else delete next.unassigned;
+            }
+        }
 
         // Hook files depend on the Claude folders just chosen
         const hookFiles = claudeSettingsFiles(claudeDirs(next.claudeDirs));
@@ -484,7 +577,7 @@ async function settingsMenu() {
             { label: M.lang, detail: LANGS[settings.lang]?.langName ?? settings.lang, value: 'lang' },
             { label: M.where, detail: whereText(config), value: 'where' },
             { label: M.claude, detail: settings.claudeDirs.map(tilde).join(', ') || '–', value: 'claude' },
-            { label: M.plan, detail: PLAN_NAMES[config.plan ?? 'max5x'] ?? config.plan, value: 'plan' },
+            { label: M.accounts, detail: accountsIn(settings.claudeDirs, settings.machine, settings.syncDir).map((a) => a.name).join(', ') || '–', value: 'accounts' },
             { label: M.machine, detail: settings.machine, value: 'machine' },
             { label: M.timezone, detail: settings.timezone, value: 'timezone' },
             { label: M.anonymize, detail: config.anonymizeProjects ? S().yes : S().no, value: 'anonymize' },
@@ -508,7 +601,25 @@ async function settingsMenu() {
             else if (item.value === 'claude') {
                 const found = [...new Set([...claudeDirs(next.claudeDirs), ...findClaudeDirs()])];
                 next.claudeDirs = await askClaudeDirs(head, found, settings.claudeDirs);
-            } else if (item.value === 'plan') next.plan = await askPlan(head, config.plan ?? 'max5x');
+            } else if (item.value === 'accounts') {
+                // A list of the accounts and the rows without one; pick, answer, back to this list
+                const accounts = accountsIn(settings.claudeDirs, settings.machine, settings.syncDir);
+                const days = unassignedDays(settings.syncDir, settings.machine);
+                out('');
+                const pick = await select([head], S().keys, [
+                    ...accounts.map((a) => ({ label: a.name, detail: planText(config.accounts?.[a.id] ?? { plan: a.plan }) + '  ' + tilde(a.dir), value: a.id })),
+                    ...(days ? [{ label: M.unassigned, detail: config.unassigned ? (accounts.find((a) => a.id === config.unassigned)?.name ?? '') : S().keepUnknown, value: '' }] : []),
+                    { label: M.back, value: 'back' },
+                ]);
+                if (pick.value === 'back') continue;
+                next.accounts = { ...next.accounts };
+                if (pick.value) next.accounts[pick.value] = await askAccount(paint('bold', pick.label), accounts.find((a) => a.id === pick.value)!, next.accounts[pick.value]);
+                else {
+                    const owner = await askUnassigned(paint('bold', M.unassigned), days, accounts.map((a) => ({ id: a.id, name: a.name })), next.unassigned);
+                    if (owner) next.unassigned = owner;
+                    else delete next.unassigned;
+                }
+            }
             else if (item.value === 'machine')
                 next.machine = await askText(head, [M.machineNote], fill(M.askMachine, { current: settings.machine }), settings.machine, () => undefined);
             else if (item.value === 'timezone')
@@ -544,6 +655,10 @@ async function status() {
         machine: settings.machine,
         machines: snaps.map((s) => ({ name: s.machine, updated: s.updated, days: new Set(s.rows.map((r) => r.d)).size })),
         claudeDirs: settings.claudeDirs,
+        accounts: accountsIn(settings.claudeDirs, settings.machine, settings.syncDir).map((a) => {
+            const given = config.accounts?.[a.id] ?? { plan: a.plan };
+            return { name: a.name, plan: given.plan ?? null, price: planPrice(given.plan, given.price) ?? null, shown: planText(given) };
+        }),
         retentionDays: retentionDays(settings.claudeDirs),
         schedule: scheduleInstalled(),
         hook: claudeSettingsFiles(settings.claudeDirs).every(hookInstalled),
@@ -560,6 +675,7 @@ async function status() {
         [St.machine, info.machine],
         [St.machines, info.machines.length ? info.machines.map((m) => fill(St.machineLine, { name: m.name, updated: when(m.updated), days: m.days })).join('\n' + ' '.repeat(0)) : St.none],
         [St.claudeDirs, info.claudeDirs.join('\n') || St.none],
+        [St.accounts, info.accounts.map((a) => `${a.name}: ${a.shown}`).join('\n') || St.none],
         [St.retention, fill(St.retentionValue, { n: info.retentionDays })],
         [St.scheduler, mark(info.schedule)],
         [St.hook, mark(info.hook)],
