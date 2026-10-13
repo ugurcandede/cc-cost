@@ -27,10 +27,14 @@ Command-line flags win over the file for a single run: `--sync-dir`, `--lang`, `
 
 Any folder a sync service keeps identical on your machines works: Dropbox, iCloud Drive, OneDrive,
 Google Drive, Syncthing, a network share. cc-cost only reads and writes files there; it never talks to
-the service. `setup` looks for Syncthing folders, Dropbox (including business folders), OneDrive, iCloud
-Drive and Google Drive, and proposes a `cc-cost` folder inside the first one found, or an existing
+the service. `setup` looks for Syncthing folders ![beta](https://img.shields.io/badge/beta-yellow), Dropbox (including business folders), OneDrive,
+iCloud Drive and Google Drive, and proposes a `cc-cost` folder inside the first one found, or an existing
 `cc-cost` or `claude-cost` folder there. Syncthing comes first because it is never installed by default;
-to use another folder, answer `n` and type its path.
+to use another folder, pick **Another folder…** and type its path.
+
+![beta](https://img.shields.io/badge/beta-yellow) marks what rests on something not checked against the real thing yet: where Syncthing keeps its
+list of folders, where a second Claude Code folder keeps its login, and the Team prices. cc-cost shows
+the same yellow mark wherever these appear.
 
 Each machine writes only `machines/<machine>.json`, so the sync service never sees two writers on one
 file. `dashboard.html` is the exception: every machine rewrites it. If two do so at the same moment your
@@ -144,13 +148,13 @@ one account's session inherits that account's variable and would otherwise sync 
 ### Accounts and plans
 
 cc-cost tells accounts apart by the login Claude Code keeps in `.claude.json` (`~/.claude.json` for
-`~/.claude`, inside the folder for any other), so the same account counts as one on every machine: a
+`~/.claude`, inside the folder for any other ![beta](https://img.shields.io/badge/beta-yellow)), so the same account counts as one on every machine: a
 Team seat on a Mac and the same seat in `~/.claude-work` on a PC add up. A folder without a login, such
 as one used with an API key, is an account of its own on its own machine.
 
 `setup` asks each account for a name and a plan. The plan found in the login is preselected: Pro and Max
 are named there outright; for Team the login does not say which seat or what it costs, so pick Team
-Premium ($125 a month), Team Standard ($25), **Sponsored / free** (a seat someone else pays for: its cost
+Premium ($125 a month), Team Standard ($25) ![beta](https://img.shields.io/badge/beta-yellow), **Sponsored / free** (a seat someone else pays for: its cost
 shows, but it stays out of the plan multiple), or **Another price…** for annual billing or a negotiated
 price. Change them later in `cc-cost config` → Claude accounts.
 

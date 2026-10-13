@@ -7,9 +7,9 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { detectAccount, type Detected } from './accounts.ts';
 import { accountLabel, accountsOf, applyFilter, applyHourFilter, hourFilterable, priceRows, type Filter } from './aggregate.ts';
-import { CONFIG_KEYS, configFile, loadConfig, PLAN_NAMES, planPrice, PLANS, saveConfig, type Config } from './config.ts';
+import { CONFIG_KEYS, configFile, isBetaPlan, loadConfig, PLAN_NAMES, planPrice, PLANS, saveConfig, type Config } from './config.ts';
 import { writeDashboard } from './dashboard.ts';
-import { paint, setColor, table } from './format.ts';
+import { beta, paint, setColor, table } from './format.ts';
 import { fill, L, lang, LANGS, setLang } from './i18n.ts';
 import { claudeDirs, configDir, defaultMachine, findClaudeDirs, parseDirs, retentionDays } from './paths.ts';
 import { loadPrices } from './pricing.ts';
@@ -165,7 +165,11 @@ function dashboard(d: Data) {
             // usage from before accounts falls back to the plan setting, as in the plan report
             const plan = a?.plan ?? (id === UNKNOWN ? config.plan : undefined);
             const name = a?.label ?? d.rows.find((r) => r.account === id)!.accountName;
-            return [name, { plan: plan === 'free' ? L().setup.sponsored : plan && (PLAN_NAMES[plan] ?? plan), price: planPrice(plan, a?.price) }];
+            return [name, {
+                plan: plan === 'free' ? L().setup.sponsored : plan && (PLAN_NAMES[plan] ?? plan),
+                price: planPrice(plan, a?.price),
+                ...(isBetaPlan(plan) && a?.price === undefined && { beta: true }),
+            }];
         })),
         updated: new Date().toISOString(),
         machines: d.snaps.length,
@@ -275,7 +279,13 @@ async function askClaudeDirs(head: string, found: string[], configured: string[]
 
 type AccountChoice = NonNullable<Config['accounts']>[string];
 const planText = (a: AccountChoice | undefined) =>
-    !a?.plan && a?.price === undefined ? '–' : a.plan === 'free' ? S().sponsored : [a.plan && (PLAN_NAMES[a.plan] ?? a.plan), a.price !== undefined && '$' + a.price].filter(Boolean).join(' · ');
+    !a?.plan && a?.price === undefined
+        ? '–'
+        : a.plan === 'free'
+          ? S().sponsored
+          : [a.plan && (PLAN_NAMES[a.plan] ?? a.plan) + (isBetaPlan(a.plan) && a.price === undefined ? ' ' + beta() : ''), a.price !== undefined && '$' + a.price]
+                .filter(Boolean)
+                .join(' · ');
 
 // The Claude accounts behind the given folders, as the login in each says, with the names already given
 // to them here or on another machine
@@ -292,13 +302,16 @@ function accountsIn(dirs: string[], machine: string, syncDir: string) {
 // Name, then plan. The plan found in the login is preselected; Team seats, sponsored ones and other
 // prices are the user's to say, since the login does not tell.
 async function askAccount(head: string, a: Detected & { dir: string; name: string }, current: AccountChoice | undefined): Promise<AccountChoice> {
-    const found = a.plan ? PLAN_NAMES[a.plan] ?? a.plan : S().noPlanFound;
+    // A Team guess is beta, and so is what was found for a folder other than ~/.claude, whose login file
+    // is expected inside it (not checked on a real setup yet)
+    const unsure = isBetaPlan(a.plan) || path.resolve(a.dir) !== path.resolve(os.homedir(), '.claude');
+    const found = (a.plan ? PLAN_NAMES[a.plan] ?? a.plan : S().noPlanFound) + (unsure ? '  ' + beta() : '');
     const name = await askText(head, [fill(S().accountIntro, { plan: found })], fill(S().askName, { current: a.name }), a.name, () => undefined);
     type Pick = { plan?: string; custom?: true };
     const choices: Choice<Pick>[] = [
         ...['pro', 'max5x', 'max20x', 'teamPremium', 'teamStandard'].map((p) => ({
             label: PLAN_NAMES[p]!,
-            detail: fill(S().perMonth, { price: '$' + PLANS[p] }) + (p === a.plan ? '  ·  ' + S().detected : ''),
+            detail: fill(S().perMonth, { price: '$' + PLANS[p] }) + (isBetaPlan(p) ? '  ' + beta() : '') + (p === a.plan ? '  ·  ' + S().detected : ''),
             value: { plan: p },
         })),
         { label: S().sponsored, detail: S().sponsoredDetail, value: { plan: 'free' } },
@@ -311,7 +324,7 @@ async function askAccount(head: string, a: Detected & { dir: string; name: strin
         out('');
         const c = await select([planHead], S().keys, choices, initial);
         if (!c.value.custom) {
-            answered(planHead, c.label);
+            answered(planHead, c.label + (isBetaPlan(c.value.plan) ? '  ' + beta() : ''));
             return { name, plan: c.value.plan };
         }
         // An own price keeps the plan it is a price of, for the label
@@ -362,7 +375,12 @@ const whereText = (c: Config) => (c.remote ? `SSH  ${c.remote}` : c.syncDir ? ti
 // Picking one clears the others, so the config never holds two places.
 async function askWhere(head: string, next: Config, folders: SyncFolder[]) {
     type Where = { kind: 'folder'; path: string } | { kind: 'remote'; remote: string } | { kind: 'other' | 'ssh' | 'local' };
-    const choices: Choice<Where>[] = folders.map((f) => ({ label: f.name, detail: tilde(dataFolderIn(f.path)), value: { kind: 'folder', path: dataFolderIn(f.path) } }));
+    // Syncthing's config locations are not checked against a real install yet: beta
+    const choices: Choice<Where>[] = folders.map((f) => ({
+        label: f.name,
+        detail: tilde(dataFolderIn(f.path)) + (f.name === 'Syncthing' ? '  ' + beta() : ''),
+        value: { kind: 'folder', path: dataFolderIn(f.path) },
+    }));
     if (next.syncDir && !choices.some((c) => c.value.kind === 'folder' && c.value.path === next.syncDir))
         choices.unshift({ label: S().currentFolder, detail: tilde(next.syncDir), value: { kind: 'folder', path: next.syncDir } });
     if (next.remote) choices.unshift({ label: 'SSH', detail: next.remote, value: { kind: 'remote', remote: next.remote } });
@@ -655,6 +673,11 @@ async function status() {
     const St = L().status;
     const snaps = loadAll(settings.syncDir);
     const prices = await loadPrices(pricesCache(), { offline: true });
+    // each account with the plan given to it here, else the one in its login
+    const accounts = accountsIn(settings.claudeDirs, settings.machine, settings.syncDir).map((a) => ({
+        name: a.name,
+        given: config.accounts?.[a.id] ?? { plan: a.plan },
+    }));
     const info = {
         version: pkg.version,
         config: configFile(),
@@ -663,10 +686,7 @@ async function status() {
         machine: settings.machine,
         machines: snaps.map((s) => ({ name: s.machine, updated: s.updated, days: new Set(s.rows.map((r) => r.d)).size })),
         claudeDirs: settings.claudeDirs,
-        accounts: accountsIn(settings.claudeDirs, settings.machine, settings.syncDir).map((a) => {
-            const given = config.accounts?.[a.id] ?? { plan: a.plan };
-            return { name: a.name, plan: given.plan ?? null, price: planPrice(given.plan, given.price) ?? null, shown: planText(given) };
-        }),
+        accounts: accounts.map(({ name, given }) => ({ name, plan: given.plan ?? null, price: planPrice(given.plan, given.price) ?? null })),
         retentionDays: retentionDays(settings.claudeDirs),
         schedule: scheduleInstalled(),
         hook: claudeSettingsFiles(settings.claudeDirs).every(hookInstalled),
@@ -683,7 +703,7 @@ async function status() {
         [St.machine, info.machine],
         [St.machines, info.machines.length ? info.machines.map((m) => fill(St.machineLine, { name: m.name, updated: when(m.updated), days: m.days })).join('\n' + ' '.repeat(0)) : St.none],
         [St.claudeDirs, info.claudeDirs.join('\n') || St.none],
-        [St.accounts, info.accounts.map((a) => `${a.name}: ${a.shown}`).join('\n') || St.none],
+        [St.accounts, accounts.map(({ name, given }) => `${name}: ${planText(given)}`).join('\n') || St.none],
         [St.retention, fill(St.retentionValue, { n: info.retentionDays })],
         [St.scheduler, mark(info.schedule)],
         [St.hook, mark(info.hook)],

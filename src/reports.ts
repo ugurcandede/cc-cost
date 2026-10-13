@@ -2,8 +2,8 @@ import {
     agentOf, avgContext, byCost, cacheHitRatio, contextTokens, daysBetween, groupBy, modelLabel, repriceAs, totals, weekOf,
     type Account, type MachineLimit, type PricedHour, type PricedRow, type Totals,
 } from './aggregate.ts';
-import { PLAN_NAMES, planPrice, PLANS } from './config.ts';
-import { int, paint, table, tokens, usd } from './format.ts';
+import { isBetaPlan, PLAN_NAMES, planPrice, PLANS } from './config.ts';
+import { beta, BETA, int, markBeta, paint, table, tokens, usd } from './format.ts';
 import { fill, L, lang } from './i18n.ts';
 import type { PriceTable } from './pricing.ts';
 import { localClock } from './scan.ts';
@@ -25,9 +25,9 @@ const FMT: Record<Kind, (v: number) => string> = {
 };
 
 export function renderTable(r: Report): string {
-    const cell = (v: Cell, i: number) => (typeof v === 'number' ? FMT[r.cols[i]!.kind](v) : v);
+    const cell = (v: Cell, i: number) => (typeof v === 'number' ? FMT[r.cols[i]!.kind](v) : markBeta(v));
     const left = r.cols.flatMap((c, i) => (c.kind === 'text' ? [i] : []));
-    return table(r.cols.map((c) => c.title), r.rows.map((row) => row.map(cell)), { foot: r.foot?.map(cell), left, dim: r.dim });
+    return table(r.cols.map((c) => markBeta(c.title)), r.rows.map((row) => row.map(cell)), { foot: r.foot?.map(cell), left, dim: r.dim });
 }
 
 const csvCell = (v: Cell) =>
@@ -407,7 +407,7 @@ export function planReport(rows: PricedRow[], limits: MachineLimit[], opts: { ti
     const planName = PLAN_NAMES;
     const report: Report = {
         cols: [col(c.month, 'text'), col(c.days, 'int'), col(c.cost, 'usd'), col(c.perMonth, 'usd'),
-            ...plans.map(([k, price]) => col(`${planName[k] ?? k} ($${price})`, 'x')), col(c.limitHits, 'int')],
+            ...plans.map(([k, price]) => col(`${planName[k] ?? k} ($${price})${isBetaPlan(k) ? ' ' + BETA : ''}`, 'x')), col(c.limitHits, 'int')],
         rows: months,
         foot,
     };
@@ -427,7 +427,8 @@ export function planReport(rows: PricedRow[], limits: MachineLimit[], opts: { ti
     const paid = perAccount.filter((a) => a.price);
     const paidPrice = paid.reduce((s, a) => s + a.price!, 0);
     const paidPer30 = paid.reduce((s, a) => s + a.per30, 0);
-    const planLabel = (plan?: string) => (plan === 'free' ? P.sponsored : plan ? (planName[plan] ?? plan) : '–');
+    const planLabel = (plan?: string) =>
+        plan === 'free' ? P.sponsored : plan ? (planName[plan] ?? plan) + (isBetaPlan(plan) ? ' ' + BETA : '') : '–';
     const accountsReport: Report = {
         cols: [col(c.account, 'text'), col(c.plan, 'text'), col(c.planPrice, 'usd'), col(c.days, 'int'), col(c.cost, 'usd'), col(c.perMonth, 'usd'),
             col(c.multiple, 'x'), col(c.limitHits, 'int')],
@@ -439,12 +440,13 @@ export function planReport(rows: PricedRow[], limits: MachineLimit[], opts: { ti
     const sponsored = perAccount.filter((a) => a.price === 0);
     const notes = [
         paid.length === 1
-            ? fill(P.yours, { plan: planLabel(paid[0]!.plan), price: paid[0]!.price!, multiple: paid[0]!.multiple!.toFixed(1) })
+            ? markBeta(fill(P.yours, { plan: planLabel(paid[0]!.plan), price: paid[0]!.price!, multiple: paid[0]!.multiple!.toFixed(1) }))
             : paid.length
               ? fill(P.combined, { n: paid.length, price: paidPrice, multiple: (paidPer30 / paidPrice).toFixed(1) })
               : P.noPlan,
         ...(sponsored.length ? [fill(P.sponsoredNote, { names: sponsored.map((a) => a.name).join(', ') })] : []),
         ...(unpriced.length && paid.length ? [fill(P.unpricedNote, { names: unpriced.map((a) => a.name).join(', ') })] : []),
+        ...(onTeam ? [`${beta()} ${P.betaTeam}`] : []),
         paint('dim', P.note),
     ];
     const json = {

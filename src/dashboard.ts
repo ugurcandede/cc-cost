@@ -21,7 +21,7 @@ export interface DashboardMeta {
     planPrice: number;
     // by the name an account is shown under: the plan's name and its price a month; a price of 0 is a
     // sponsored seat, none an account without a known plan. Both stay out of the plan multiple.
-    accounts: Record<string, { plan?: string; price?: number }>;
+    accounts: Record<string, { plan?: string; price?: number; beta?: true }>; // beta: a Team list price, not verified
     updated: string; // ISO
     machines: number;
     first: string;
@@ -60,7 +60,8 @@ const DARK = `
   --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
   --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10); --shadow:rgba(0,0,0,.5);
   --hue-1:#3987e5;--hue-2:#d95926;--hue-3:#199e70;--hue-4:#c98500;
-  --hue-5:#d55181;--hue-6:#008300;--hue-7:#9085e9;--hue-8:#e66767;`;
+  --hue-5:#d55181;--hue-6:#008300;--hue-7:#9085e9;--hue-8:#e66767;
+  --beta-ink:#f5c542; --beta-bg:rgba(245,197,66,.14);`;
 
 // The theme menu's entries: mode, icon, label
 const THEMES = [['system', 'system', 'themeSystem'], ['light', 'sun', 'themeLight'], ['dark', 'moon', 'themeDark']] as const;
@@ -126,7 +127,10 @@ export function writeDashboard(d: { rows: PricedRow[]; limits: MachineLimit[] },
   --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10); --shadow:rgba(0,0,0,.12);
   --hue-1:#2a78d6;--hue-2:#eb6834;--hue-3:#1baf7a;--hue-4:#eda100;
   --hue-5:#e87ba4;--hue-6:#008300;--hue-7:#4a3aa7;--hue-8:#e34948;
+  --beta-ink:#7a5600; --beta-bg:#fdefc3;
 }
+.beta{display:inline-block;margin-left:6px;padding:0 5px;border-radius:4px;background:var(--beta-bg);color:var(--beta-ink);
+  font-size:10px;font-weight:600;letter-spacing:.02em;vertical-align:1px;cursor:help}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${DARK}
 }}
 :root[data-theme="dark"]{${DARK}
@@ -506,7 +510,13 @@ function render() {
   // over the days the paid accounts were in use, so an account added later is not diluted by days before it
   const paidSpan = calendarSpan([...new Set(paidRows.map(r => r.d))].sort());
   const plans = [...new Set(paid.map(a => META.accounts[a].plan || a))].join(' + ');
-  document.getElementById('tMultL').textContent = price ? fill(L.planMultipleOf, { plans, price: '$' + price }) : L.noPaidPlan;
+  const multL = document.getElementById('tMultL');
+  multL.textContent = price ? fill(L.planMultipleOf, { plans, price: '$' + price }) : L.noPaidPlan;
+  if (paid.some(a => META.accounts[a].beta)) {
+    const b = document.createElement('span');
+    b.className = 'beta'; b.textContent = 'beta'; b.title = L.betaTitle;
+    multL.append(b);
+  }
   document.getElementById('tMult').textContent = active && price ? (paidCost / (price * paidSpan / 30)).toFixed(1) + '×' : '–';
   document.getElementById('tMultN').textContent = !active ? '' :
     [fill(L.normalized, { n: price ? paidSpan : span }), ...(left.length ? [fill(L.leftOut, { names: left.join(', ') })] : [])].join(' · ');

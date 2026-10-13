@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { stripVTControlCharacters } from 'node:util';
+import { table } from '../src/format.ts';
 import type { Account, PricedHour, PricedRow } from '../src/aggregate.ts';
 import { blocksReport, dimensionReport, periodReport, planReport, renderCsv } from '../src/reports.ts';
 import { T_LEN, UNKNOWN } from '../src/types.ts';
@@ -87,4 +89,10 @@ test('csv: one row per period and model, raw numbers, quoted text', () => {
     assert.equal(lines[0], 'Date,Model,Input,Output,Cache write,Cache read,Calls,Cost');
     assert.equal(lines[1], '2026-09-10,claude-fable-5-1,0,0,0,0,1,2');
     assert.equal(renderCsv({ cols: [{ title: 'a', kind: 'text' }], rows: [['x, "y"']] }), 'a\n"x, ""y"""');
+});
+
+test('tables line up cells that carry color codes, such as a yellow beta', () => {
+    const lines = table(['Plan', 'Price'], [['Team Premium \x1b[33mbeta\x1b[39m', '$125'], ['Max 5x', '$100']]).split('\n');
+    const shown = lines.map((l) => stripVTControlCharacters(l));
+    assert.equal(shown[2]!.indexOf('$125'), shown[3]!.indexOf('$100'));
 });
