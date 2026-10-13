@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { accountLabel } from './aggregate.ts';
+import { isBetaPlan, PLAN_NAMES, type Config } from './config.ts';
+import { beta } from './format.ts';
+import { L } from './i18n.ts';
 
 // Which Claude account a Claude Code folder is logged in to, and on which plan. Claude Code keeps the
 // login in .claude.json: inside the folder when CLAUDE_CONFIG_DIR points at it, next to it (~/.claude.json)
@@ -59,4 +63,27 @@ export function planOf(o: OAuthAccount): string | undefined {
         default:
             return undefined;
     }
+}
+
+// An account with the name reports show it under: given here, else given on another machine (known), else
+// the folder's. One entry per account, even when two folders are logged in to the same one.
+export interface NamedAccount extends Detected {
+    dir: string;
+    name: string;
+}
+export function namedAccounts(dirs: string[], machine: string, given: Config['accounts'], known: Map<string, { name?: string }>): NamedAccount[] {
+    const seen = new Map<string, NamedAccount>();
+    for (const dir of dirs) {
+        const a = detectAccount(dir, machine);
+        if (!seen.has(a.id)) seen.set(a.id, { ...a, dir, name: given?.[a.id]?.name ?? known.get(a.id)?.name ?? accountLabel(a.id, { folder: a.folder }) });
+    }
+    return [...seen.values()];
+}
+
+// How an account's plan reads: "Max 5x", "Team Premium beta", "Sponsored / free", "Team Premium · $100"
+export function planText(a: { plan?: string; price?: number } | undefined): string {
+    if (!a?.plan && a?.price === undefined) return '–';
+    if (a.plan === 'free') return L().setup.sponsored;
+    const name = a.plan && (PLAN_NAMES[a.plan] ?? a.plan) + (isBetaPlan(a.plan) && a.price === undefined ? ' ' + beta() : '');
+    return [name, a.price !== undefined && '$' + a.price].filter(Boolean).join(' · ');
 }

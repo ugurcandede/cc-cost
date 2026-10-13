@@ -12,7 +12,6 @@ export interface Settings {
     machine: string;
     lang: string;
     timezone: string;
-    planPrice: number;
     anonymize: boolean;
     pricing: Record<string, number[]>;
     claudeDirs: string[];

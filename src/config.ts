@@ -8,7 +8,7 @@ export interface Config {
     machine?: string; // display name for this machine; defaults to the hostname
     lang?: string;
     timezone?: string; // IANA zone used to split days; defaults to the system zone
-    plan?: string; // key of PLANS, for the plan-value multiple
+    plan?: string; // key of PLANS, for usage synced before accounts were told apart; accounts carry their own
     anonymizeProjects?: boolean;
     pricing?: Record<string, number[]>; // per-model overrides, same layout as PRICES
     remote?: string; // user@host:path of a server reached over ssh

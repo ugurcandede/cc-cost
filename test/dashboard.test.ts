@@ -13,7 +13,7 @@ const row = (account: string, cost: number): PricedRow => ({
 });
 
 const meta: DashboardMeta = {
-    lang: 'en', timezone: 'UTC', planPrice: 100, accounts: { Personal: { plan: 'Max 5x', price: 100 }, Work: { plan: 'Sponsored / free', price: 0 } },
+    lang: 'en', timezone: 'UTC', accounts: { Personal: { plan: 'Max 5x', price: 100 }, Work: { plan: 'Sponsored / free', price: 0 } },
     updated: '2026-09-10T00:00:00Z', machines: 1, first: '2026-09-10', last: '2026-09-10', prices: 'bundled', version: '0', repo: '', npm: '', site: '',
 };
 

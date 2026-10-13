@@ -18,10 +18,9 @@ const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
 export interface DashboardMeta {
     lang: string;
     timezone: string;
-    planPrice: number;
     // by the name an account is shown under: the plan's name and its price a month; a price of 0 is a
     // sponsored seat, none an account without a known plan. Both stay out of the plan multiple.
-    accounts: Record<string, { plan?: string; price?: number; beta?: true }>; // beta: a Team list price, not verified
+    accounts: Record<string, { plan?: string; price?: number; beta?: boolean }>; // beta: a Team list price, not verified
     updated: string; // ISO
     machines: number;
     first: string;

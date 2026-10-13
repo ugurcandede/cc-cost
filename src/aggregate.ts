@@ -119,7 +119,7 @@ export interface Filter {
 }
 
 // Name filters match case-insensitive substrings ("opus" -> every Opus model); sessions match by id prefix.
-const matches = (wanted: string[] | undefined, value: string) =>
+export const matches = (wanted: string[] | undefined, value: string) =>
     !wanted?.length || wanted.some((w) => value.toLowerCase().includes(w.toLowerCase()));
 
 export function applyFilter(rows: PricedRow[], f: Filter): PricedRow[] {

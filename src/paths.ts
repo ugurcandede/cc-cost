@@ -29,6 +29,15 @@ export function configDir(): string {
     return path.join(XDG_CONFIG, 'cc-cost');
 }
 
+// Where the data goes without a shared folder: this machine only
+export const defaultSyncDir = () => path.join(configDir(), 'data');
+
+// A path under the home folder, shown from ~
+export function tilde(p: string): string {
+    const rel = path.relative(path.resolve(HOME), p);
+    return !rel ? '~' : rel.startsWith('..') || path.isAbsolute(rel) ? p : path.join('~', rel);
+}
+
 // Claude Code deletes transcripts older than cleanupPeriodDays (default 30). With several roots,
 // the shortest window wins: a day older than that may have been partially cleaned up somewhere.
 export function retentionDays(dirs: string[]): number {

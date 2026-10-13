@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fill, L } from './i18n.ts';
 
 // A server reached with the system's ssh and scp, written one of two ways:
 //   user@host:path                       scp's own syntax, port 22
@@ -104,4 +105,13 @@ export function remoteParts(remote: string): { user?: string; known: string } | 
     const at = r.host.lastIndexOf('@');
     const name = r.host.slice(at + 1).replace(/[[\]]/g, '');
     return { user: at > 0 ? r.host.slice(0, at) : undefined, known: r.port && r.port !== 22 ? `[${name}]:${r.port}` : name };
+}
+
+// What to check after an ssh failure, in plain words; empty when ssh's own message is all there is
+export function sshHint(message: string, remote: string): string {
+    const kind = sshFailure(message);
+    const parts = remoteParts(remote);
+    if (!kind || !parts) return '';
+    const H = L().sshHint;
+    return kind === 'auth' ? (parts.user ? fill(H.authUser, { user: parts.user }) : H.auth) : fill(H[kind], { known: parts.known });
 }
