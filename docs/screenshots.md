@@ -1,76 +1,102 @@
-# Screenshots
+# A tour of cc-cost
 
-All on the demo's sample data (`scripts/demo`): two machines, two Claude accounts (a Max 5x account and
-a Team seat), 30 days of made-up usage. Window 1280 pixels wide.
+Everything below is the demo's sample data (`scripts/demo`): two machines, a Max 5x account and a Team
+seat, 30 days of made-up usage. Nothing here is a real account.
 
-## Dashboard
+## One file, every machine
 
-<table>
-  <tr>
-    <td><img src="assets/dashboard-dark.png" alt="The dashboard in English, dark theme"></td>
-    <td><img src="assets/turkish.png" alt="The dashboard in Turkish, dark theme"></td>
-  </tr>
-  <tr>
-    <td><sub>English</sub></td>
-    <td><sub>Türkçe: the language switches on the page</sub></td>
-  </tr>
-  <tr>
-    <td><img src="assets/dashboard-light.png" alt="The dashboard, light theme"></td>
-    <td><img src="assets/theme-menu.png" alt="The theme menu: system, light, dark"></td>
-  </tr>
-  <tr>
-    <td><sub>Light theme</sub></td>
-    <td><sub>Light, dark, or whatever the system uses</sub></td>
-  </tr>
-  <tr>
-    <td><img src="assets/accounts.png" alt="Two Claude accounts: buttons to pick one, and a card per account"></td>
-    <td><img src="assets/chart-by-account.png" alt="Daily cost stacked by account"></td>
-  </tr>
-  <tr>
-    <td><sub>Accounts: buttons to pick one, a card per account with its cost, share and multiple against its own plan</sub></td>
-    <td><sub>Daily cost stacked by account; also by model, project or machine</sub></td>
-  </tr>
-  <tr>
-    <td><img src="assets/cost-and-context.png" alt="Cost by token type and calls by context size"></td>
-    <td><img src="assets/models-and-projects.png" alt="Cost per model and per project"></td>
-  </tr>
-  <tr>
-    <td><sub>Where the cost goes, and calls by context size</sub></td>
-    <td><sub>Cost, share, calls and average context per model and per project</sub></td>
-  </tr>
-  <tr>
-    <td><img src="assets/sessions.png" alt="The most expensive sessions"></td>
-    <td><img src="assets/attribution.png" alt="Main thread vs subagents, skills, MCP servers"></td>
-  </tr>
-  <tr>
-    <td><sub>The most expensive sessions in the range</sub></td>
-    <td><sub>What subagents, skills and MCP servers cost</sub></td>
-  </tr>
-  <tr>
-    <td colspan="2"><img src="assets/machines-and-limits.png" alt="Cost per machine, and the rate-limit hits with their account"></td>
-  </tr>
-  <tr>
-    <td colspan="2"><sub>Per machine, and every rate-limit hit with its account</sub></td>
-  </tr>
-</table>
+`cc-cost report` opens `dashboard.html`: a single file in the shared folder, no server, nothing to
+install on the machine that opens it. The last 30 days across both machines and both accounts, with the
+daily cost stacked by model.
 
-## Terminal
+![The dashboard: filters, the total with a card per account, and the daily cost chart](assets/dashboard-dark.png)
 
-<table>
-  <tr>
-    <td><img src="assets/terminal-summary.png" alt="cc-cost: the summary"></td>
-    <td><img src="assets/terminal-plan.png" alt="cc-cost plan"></td>
-  </tr>
-  <tr>
-    <td><sub><code>cc-cost</code>: sync, then the summary by month, account, machine, model, project and token type</sub></td>
-    <td><sub><code>cc-cost plan</code>: the API equivalent against every plan, then each account against its own</sub></td>
-  </tr>
-  <tr>
-    <td><img src="assets/terminal-insights.png" alt="cc-cost insights"></td>
-    <td><img src="assets/terminal-projects.png" alt="cc-cost projects --last 30"></td>
-  </tr>
-  <tr>
-    <td><sub><code>cc-cost insights</code>: cache, context size, attribution, models, busiest times, limits</sub></td>
-    <td><sub><code>cc-cost projects --last 30</code></sub></td>
-  </tr>
-</table>
+Three rows of filters narrow everything on the page: the account, then the scope (machine) and the
+breakdown (project, model), then the period. The chart stacks by model, project, machine or account.
+
+## Several Claude accounts, each against its own plan
+
+A Max account and a Team seat on one machine, or the same seat on two machines: cc-cost tells them apart
+by the login in each Claude Code folder. With all accounts selected, a card per account shows its cost,
+its share of the total and its multiple against its own plan; a card, or a button above, narrows the
+page to that account. The plan multiple in the row below sets the accounts in view against what their
+plans cost together. A sponsored seat shows its cost but stays out of the multiple.
+
+![Account buttons above the filters, and a card per account inside the total](assets/accounts.png)
+
+Stacked by account, the daily chart shows which account the spending comes from.
+
+![Daily cost stacked by account](assets/chart-by-account.png)
+
+## Where the money goes
+
+Cache reads are usually the largest item: every call re-reads the whole conversation. Next to it, how
+many tokens each call carried. Bigger contexts cost more on every call, so a session that sits above
+200K tokens is worth a `/compact`.
+
+![Cost by token type, and calls by context size](assets/cost-and-context.png)
+
+## By model and by project
+
+Cost, share, calls and average context per model and per project. A project is the git repository the
+session ran in; fast-mode calls show as `<model>-fast`.
+
+![Cost per model and per project](assets/models-and-projects.png)
+
+## The sessions that cost the most
+
+The 15 most expensive sessions in the range, with their project, machine, dates, calls and average
+context. The session id is the one Claude Code shows in `/resume`.
+
+![The most expensive sessions](assets/sessions.png)
+
+## Subagents, skills, MCP servers
+
+What the main thread costs against the subagents it spawned, and which skills and MCP servers the calls
+were attributed to.
+
+![Main thread vs subagents, skills, MCP servers](assets/attribution.png)
+
+## Machines and rate limits
+
+Each machine's share, and every rate-limit hit Claude Code recorded, with the machine and the account it
+hit. Limits are per account, so the hits are too.
+
+![Cost per machine, and the rate-limit hits with their account](assets/machines-and-limits.png)
+
+## Light or dark, English or Turkish
+
+The dashboard follows the system theme and can be set to light or dark from the header; the choice is
+remembered in the browser. The language switches on the page, with the same data.
+
+![The dashboard in the light theme](assets/dashboard-light.png)
+
+![The theme menu in the header: system, light, dark](assets/theme-menu.png)
+
+![The dashboard in Turkish](assets/turkish.png)
+
+## In the terminal
+
+Every number on the dashboard is also a terminal report, with the same filters (`--last`, `--account`,
+`--machine`, `--project`, `--model`, ...) and `--json` or `--csv` for scripts.
+
+`cc-cost` alone syncs this machine, rewrites the dashboard and prints the summary: by month, account,
+machine, model, project and token type.
+
+![cc-cost: the summary](assets/terminal-summary.png)
+
+`cc-cost plan` puts the API equivalent against every plan's price per month, then each account against
+its own plan and all of them against the paid plans together. Rate-limit hits sit beside it: they are
+the direct signal of a plan that is too small.
+
+![cc-cost plan](assets/terminal-plan.png)
+
+`cc-cost insights` reads the numbers for you: cache hit ratio, context sizes, the largest sessions,
+attribution, what the same tokens would cost on another model, the busiest hours, the limits.
+
+![cc-cost insights](assets/terminal-insights.png)
+
+`cc-cost projects`, like `models`, `machines`, `accounts`, `sessions`, `agents`, `skills`, `mcp`, and
+`daily`, `weekly`, `monthly` for the periods.
+
+![cc-cost projects --last 30](assets/terminal-projects.png)

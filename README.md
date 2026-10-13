@@ -19,7 +19,7 @@
     <img src="docs/assets/dashboard-light.png" alt="The cc-cost dashboard: the last 30 days across two machines and two Claude accounts, daily cost stacked by model" width="800">
   </picture>
   <br>
-  <sub>The dashboard, on the demo's sample data. <a href="docs/screenshots.md">More screenshots</a></sub>
+  <sub>The dashboard, on the demo's sample data. <a href="docs/screenshots.md">A tour of every panel and report</a></sub>
 </p>
 
 ## Quick start
@@ -120,8 +120,8 @@ cc-cost insights --lang tr        # interface language: en (default) or tr
   </tr>
 </table>
 
-All of them, with the terminal reports, in [docs/screenshots.md](docs/screenshots.md). They come from
-the demo's sample data (`scripts/demo`), not from a real account.
+[docs/screenshots.md](docs/screenshots.md) walks through every panel and terminal report. The images
+come from the demo's sample data (`scripts/demo`), not from a real account.
 
 ## Layout
 
@@ -157,6 +157,7 @@ and on each machine:
 
 ## Further reading
 
+- [docs/screenshots.md](docs/screenshots.md): a tour of the dashboard and the terminal reports
 - [docs/cli.md](docs/cli.md): every command, filter and option
 - [docs/configuration.md](docs/configuration.md): settings, the shared folder, price overrides, privacy
 - [docs/how-it-works.md](docs/how-it-works.md): how costs are calculated, deduplication, the archive,
