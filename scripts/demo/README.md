@@ -12,6 +12,11 @@ own server without touching your real config, Claude folders, `~/.ssh` or schedu
   log in to it with a key, without a password.
 
 Everything lives in `$TMPDIR/cc-cost-demo` (`/tmp/cc-cost-demo`) and the `cc-cost-demo-sshd` container.
+
+The sample usage covers 30 days and is the same every run (`transcripts.cjs`, one profile per Claude
+folder): six projects, five models, subagents, skills, an MCP server, cache tiers, thinking, web searches,
+fast mode, long contexts and a few rate-limit hits, so every report and dashboard panel has something to
+show. `termshot.cjs` renders the colored terminal reports as HTML pages for the docs' screenshots.
 `demo-pc` and `demo-mac` both run on this computer; the names only tell the two pretend machines apart.
 
 ## Needs

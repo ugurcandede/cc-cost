@@ -48,21 +48,8 @@ wait_server() {
     exit 1
 }
 
-transcript() { # <claude dir> <model> <calls> <output tokens per call>
-    node -e '
-        const [dir, model, n, out] = process.argv.slice(1);
-        const fs = require("fs"), path = require("path");
-        const p = path.join(dir, "projects", "demo-app");
-        fs.mkdirSync(p, { recursive: true });
-        const now = Date.now(), lines = [];
-        for (let i = 0; i < +n; i++) lines.push(JSON.stringify({
-            type: "assistant", requestId: `req-${model}-${i}`, sessionId: `s-${model}`, cwd: "/work/demo-app",
-            timestamp: new Date(now - i * 36e5).toISOString(),
-            message: { id: `msg-${path.basename(dir)}-${model}-${i}`, model, usage: { input_tokens: 2000, output_tokens: +out, cache_read_input_tokens: 50000 } },
-        }));
-        fs.writeFileSync(path.join(p, `${model}.jsonl`), lines.join("\n") + "\n");
-    ' "$@"
-}
+# 30 days of made-up usage per profile, the same every run; see transcripts.cjs
+transcript() { node "$(dirname "$0")/transcripts.cjs" "$@"; }
 
 case "${1:-}" in
 up)
@@ -75,9 +62,9 @@ up)
         # Both demo machines run on this computer, so they would share its hostname as the machine name
         for d in "$h/AppData/Roaming/cc-cost" "$h/.config/cc-cost"; do printf '{"machine":"%s"}\n' "$m" > "$d/config.json"; done
     done
-    transcript "$DEMO/demo-pc/.claude" claude-opus-5 12 3000            # personal account
-    transcript "$DEMO/demo-pc/.claude-work" claude-sonnet-5 30 1500     # work account
-    transcript "$DEMO/demo-mac/.claude" claude-haiku-4-5 40 800
+    transcript "$DEMO/demo-pc/.claude" personal            # Max account: api-server, web-app, infra
+    transcript "$DEMO/demo-pc/.claude-work" work-pc        # Team seat: mobile-app, data-pipeline
+    transcript "$DEMO/demo-mac/.claude" work-mac           # the same Team seat: docs-site, mobile-app
     # Logins, the way Claude Code records them (ids and plan only): demo-pc's ~/.claude is a Max account,
     # its ~/.claude-work and demo-mac's ~/.claude are the same Team seat, so that account spans both machines.
     # The default folder's login sits next to it in ~/.claude.json, another folder's inside it.
