@@ -16,10 +16,10 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/dashboard-dark.png">
-    <img src="docs/assets/dashboard-light.png" alt="The cc-cost dashboard: the last 30 days across two machines, daily cost stacked by model" width="800">
+    <img src="docs/assets/dashboard-light.png" alt="The cc-cost dashboard: the last 30 days across two machines and two Claude accounts, daily cost stacked by model" width="800">
   </picture>
   <br>
-  <sub>The dashboard, on sample data.</sub>
+  <sub>The dashboard, on the demo's sample data. <a href="docs/screenshots.md">More screenshots</a></sub>
 </p>
 
 ## Quick start
@@ -66,16 +66,16 @@ cc-cost update               # update to the latest version
 
 ```
 $ cc-cost projects --last 30
-Project         Calls  Avg context  Cache read  Output       Cost   Share
-─────────────  ──────  ───────────  ──────────  ──────  ─────────  ──────
-api-server      4,728       207.8K      966.9M    5.7M    $722.12   45.6%
-web-app         3,051       237.9K      714.2M    3.4M    $446.28   28.2%
-mobile-app      1,443       214.9K      305.1M    1.7M    $198.60   12.6%
-data-pipeline     533       224.9K      118.0M  500.6K     $90.86    5.7%
-infra             557       231.2K      126.7M  677.1K     $77.03    4.9%
-docs-site         312       265.8K       81.6M  345.3K     $47.20    3.0%
-─────────────  ──────  ───────────  ──────────  ──────  ─────────  ──────
-Total          10,624       221.2K       2.31B   12.3M  $1,582.10  100.0%
+Project        Calls  Avg context  Cache read  Output     Cost   Share
+─────────────  ─────  ───────────  ──────────  ──────  ───────  ──────
+api-server       607        95.7K       57.3M  806.8K   $47.15   38.9%
+web-app          307       114.8K       34.9M  426.5K   $26.99   22.3%
+mobile-app       594        90.0K       52.7M  777.4K   $24.97   20.6%
+infra            169        95.0K       15.8M  217.3K   $10.87    9.0%
+data-pipeline     90       132.1K       11.8M  118.6K    $6.23    5.1%
+docs-site        199        64.2K       12.5M  272.6K    $4.85    4.0%
+─────────────  ─────  ───────────  ──────────  ──────  ───────  ──────
+Total          1,966        95.4K      185.1M    2.6M  $121.07  100.0%
 ```
 
 Every report takes the same filters and output options:
@@ -98,6 +98,30 @@ cc-cost insights --lang tr        # interface language: en (default) or tr
 - **Insights, not just totals**: context size per call, cache hit ratio, subagents, skills, MCP servers,
   the costliest sessions.
 - **Current prices**: read from Anthropic's pricing page daily, with a bundled fallback.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/assets/accounts.png" alt="Two Claude accounts: buttons to pick one, and a card per account with its cost, share and plan multiple"></td>
+    <td><img src="docs/assets/chart-by-account.png" alt="Daily cost stacked by account"></td>
+  </tr>
+  <tr>
+    <td><sub>Accounts: each against its own plan, together or apart</sub></td>
+    <td><sub>Daily cost, stacked by account, project, machine or model</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/cost-and-context.png" alt="Cost by token type and calls by context size"></td>
+    <td><img src="docs/assets/terminal-plan.png" alt="cc-cost plan in the terminal: API equivalent against every plan, then per account"></td>
+  </tr>
+  <tr>
+    <td><sub>Where the cost goes and how big the contexts are</sub></td>
+    <td><sub><code>cc-cost plan</code>: what the same usage would cost at API prices, per plan and per account</sub></td>
+  </tr>
+</table>
+
+All of them, with the terminal reports, in [docs/screenshots.md](docs/screenshots.md). They come from
+the demo's sample data (`scripts/demo`), not from a real account.
 
 ## Layout
 

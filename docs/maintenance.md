@@ -147,3 +147,13 @@ Adding a command or flag touches `cli.ts`, the `help` text in both languages, an
 A demo mode runs the sources against two pretend machines, one with two Claude accounts, and a
 throwaway SSH server in Docker, without touching your real setup. See
 [scripts/demo/README.md](../scripts/demo/README.md).
+
+## Screenshots
+
+The images in `docs/assets` and [screenshots.md](screenshots.md) come from the demo: `demo.sh up`, the
+two accounts named Personal (Max 5x) and Work (Team Premium), both machines synced, then
+`demo-pc report --location`. The dashboard was captured in a browser window 1280 pixels wide, in the
+dark theme unless the image says otherwise, cropped to the section. The terminal images are the demo's
+colored output rendered as HTML by `scripts/demo/termshot.cjs` and captured the same way. The sample
+data is deterministic (`scripts/demo/transcripts.cjs`), so a retake after a change shows the same
+numbers, shifted to the last 30 days.
