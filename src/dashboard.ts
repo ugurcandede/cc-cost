@@ -1,8 +1,12 @@
 import fs from 'node:fs';
-import { agentOf, contextTokens, groupBy, modelLabel, type MachineLimit, type PricedRow } from './aggregate.ts';
+import module from 'node:module';
+import path from 'node:path';
 import { LANGS, type Dict } from './i18n.ts';
-import { localClock } from './scan.ts';
-import { T, UNKNOWN } from './types.ts';
+import { isNewer } from './update.ts';
+
+// The dashboard is one static page, the same on every machine: it holds no usage, and reads the
+// snapshots and pricing.json next to it when opened (over HTTP: cc-cost report serves the folder).
+// Every machine only writes it when its own copy is newer than the one in the folder.
 
 // Chart colors by model, fixed so a model keeps its color whatever the filter.
 // Append new models at the end; inserting shifts every color after it. Unlisted models get slot 8.
@@ -16,20 +20,41 @@ const js = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
 const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
 export interface DashboardMeta {
-    lang: string;
-    timezone: string;
-    // by the name an account is shown under: the plan's name and its price a month; a price of 0 is a
-    // sponsored seat, none an account without a known plan. Both stay out of the plan multiple.
-    accounts: Record<string, { plan?: string; price?: number; beta?: boolean }>; // beta: a Team list price, not verified
-    updated: string; // ISO
-    machines: number;
-    first: string;
-    last: string;
-    prices: string;
     version: string; // cc-cost's own; this and the links come from package.json
     repo: string;
     npm: string;
     site: string;
+}
+
+// The page prices and merges the snapshots with the same code as the terminal: these modules, which
+// import nothing but each other, are embedded with their types stripped and their exports gathered
+// into one CC object. Running from src/ they are .ts files; from dist/ they are already .js.
+const SHARED = ['types', 'plans', 'pricing', 'aggregate', 'months'];
+export function sharedScript(): string {
+    const ts = import.meta.url.endsWith('.ts');
+    const names: string[] = [];
+    const code = SHARED.map((name) => {
+        let src = fs.readFileSync(new URL(`./${name}.${ts ? 'ts' : 'js'}`, import.meta.url), 'utf8');
+        if (ts) src = quietly(() => module.stripTypeScriptTypes(src, { mode: 'strip' }));
+        return src
+            .replace(/^import[^;]*;$/gm, '')
+            .replace(/^export (const|function) (\w+)/gm, (_, kind: string, n: string) => {
+                names.push(n);
+                return `${kind} ${n}`;
+            });
+    }).join('\n');
+    return `const CC = (() => {\n${code}\nreturn { ${names.join(', ')} };\n})();`;
+}
+
+// stripTypeScriptTypes prints an ExperimentalWarning the first time it runs; keep it off the console
+function quietly<T>(fn: () => T): T {
+    const warn = process.emitWarning;
+    process.emitWarning = () => {};
+    try {
+        return fn();
+    } finally {
+        process.emitWarning = warn;
+    }
 }
 
 // Header icons. GitHub mark from Octicons (MIT), npm mark from Simple Icons (CC0).
@@ -65,54 +90,35 @@ const DARK = `
 // The theme menu's entries: mode, icon, label
 const THEMES = [['system', 'system', 'themeSystem'], ['light', 'sun', 'themeLight'], ['dark', 'moon', 'themeDark']] as const;
 
-// Strings repeat across thousands of rows; store each once and refer to it by index.
-function dictionary() {
-    const values: string[] = [], index = new Map<string, number>();
-    return {
-        values,
-        id(v: string) {
-            let i = index.get(v);
-            if (i === undefined) index.set(v, (i = values.push(v) - 1));
-            return i;
-        },
-    };
+// Writes the page unless the folder already has this very page, or one from a newer cc-cost. Returns
+// whether it wrote.
+export function writeDashboard(file: string, meta: DashboardMeta): boolean {
+    const html = renderDashboard(meta);
+    let current: string | undefined;
+    try {
+        current = fs.readFileSync(file, 'utf8');
+    } catch {
+        // none yet
+    }
+    if (current === html) return false;
+    const theirs = current?.match(/<meta name="cc-cost-version" content="([^"]+)">/)?.[1];
+    if (theirs && isNewer(theirs, meta.version)) return false;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file + '.tmp', html);
+    fs.renameSync(file + '.tmp', file);
+    return true;
 }
 
-// Row layout shared with the page script below (R.* indices)
-function encode(rows: PricedRow[], limits: MachineLimit[], timezone: string) {
-    const dates = dictionary(), machines = dictionary(), models = dictionary(), projects = dictionary(), sessions = dictionary();
-    const agents = dictionary(), skills = dictionary(), mcps = dictionary(), accounts = dictionary();
-    const key = (r: PricedRow) => [r.d, r.machine, modelLabel(r), r.p, r.s, agentOf(r), r.k ?? '', r.x ?? '', r.accountName].join('\0');
-    const encoded = [...groupBy(rows, key)].map(([k, t]) => {
-        const [d, machine, model, p, s, a, sk, x, ac] = k.split('\0') as string[];
-        const n = (i: number) => t.t[i] ?? 0;
-        return [
-            dates.id(d!), machines.id(machine!), models.id(model!), projects.id(p!), sessions.id(s!), agents.id(a!), skills.id(sk!), mcps.id(x!),
-            n(T.calls), r4(t.cost), r4(t.c[0]), r4(t.c[1]), r4(t.c[2]), r4(t.c[3]), r4(t.c[4]),
-            contextTokens(t.t), n(T.read), n(T.output), n(T.maxContext), n(T.ctx50k), n(T.ctx200k), n(T.ctx500k), n(T.ctxOver500k),
-            accounts.id(ac!),
-        ];
-    });
-    const clock = localClock(timezone);
-    const hits = limits.filter((l) => l.status === 'rejected').map((l) => {
-        const k = clock(l.ts);
-        return [k.d, `${String(k.h).padStart(2, '0')}:${String(k.min).padStart(2, '0')}`, l.machine, l.type, l.accountName];
-    });
-    return {
-        dates: dates.values, machines: machines.values, models: models.values, projects: projects.values, sessions: sessions.values,
-        agents: agents.values, skills: skills.values, mcps: mcps.values, accounts: accounts.values, rows: encoded, hits,
-    };
-}
-
-export function writeDashboard(d: { rows: PricedRow[]; limits: MachineLimit[] }, meta: DashboardMeta, file: string): string {
-    const D: Dict['dash'] = (LANGS[meta.lang] ?? LANGS.en!).dash;
-    // Server-side text for the chosen language; the page swaps it when the language changes
+export function renderDashboard(meta: DashboardMeta): string {
+    // English in the markup; the page applies the browser's or the saved language before the first paint
+    const D: Dict['dash'] = LANGS.en!.dash;
     const text = (key: keyof Dict['dash']) => `data-t="${key}">${esc(String(D[key]))}`;
     const strings = Object.fromEntries(Object.entries(LANGS).map(([k, v]) => [k, v.dash]));
 
-    const html = `<!doctype html>
-<html lang="${esc(meta.lang)}"><head><meta charset="utf-8">
+    return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="cc-cost-version" content="${esc(meta.version)}">
 <title>cc-cost</title>
 <link rel="icon" type="image/png" sizes="180x180" href="${FAVICON_PNG}">
 <link rel="icon" type="image/svg+xml" href="${FAVICON}">
@@ -367,28 +373,27 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 </div>
 <div id="tip" role="status" aria-live="polite"></div>
 
+<script>${sharedScript()}</script>
 <script>
-const DATA = ${js(encode(d.rows, d.limits, meta.timezone))};
-const META = ${js(meta)};
+const BUILD = ${js(meta)};
 const STRINGS = ${js(strings)};
 const ORDER = ${js(ORDER)};
 // mode -> [icon, label key] for the theme button
 const THEMES = ${js(Object.fromEntries(THEMES.map(([t, icon, key]) => [t, [ICON[icon], key]])))};
-const UNKNOWN = ${js(UNKNOWN)};
-// Row layout, same order as encode() in dashboard.ts
-const R = { d: 0, machine: 1, model: 2, project: 3, session: 4, agent: 5, skill: 6, mcp: 7, calls: 8, cost: 9,
-  ci: 10, cw: 11, cr: 12, co: 13, cx: 14, ctx: 15, read: 16, out: 17, maxCtx: 18, b0: 19, account: 23 };
-const ROWS = DATA.rows.map(r => ({
-  d: DATA.dates[r[R.d]], machine: DATA.machines[r[R.machine]], model: DATA.models[r[R.model]], project: DATA.projects[r[R.project]],
-  session: DATA.sessions[r[R.session]], agent: DATA.agents[r[R.agent]], skill: DATA.skills[r[R.skill]], mcp: DATA.mcps[r[R.mcp]],
-  calls: r[R.calls], c: r[R.cost], ci: r[R.ci], cw: r[R.cw], cr: r[R.cr], co: r[R.co], cx: r[R.cx],
-  ctx: r[R.ctx], read: r[R.read], out: r[R.out], maxCtx: r[R.maxCtx], b: r.slice(R.b0, R.b0 + 4),
-  account: DATA.accounts[r[R.account]]
-}));
-// The account filter and chart option only mean something with more than one account
-const SEVERAL_ACCOUNTS = DATA.accounts.length > 1;
+const { T, UNKNOWN } = CC;
 
-let lang = META.lang;
+// Filled by load(); until then the page shows its empty state
+let ROWS = [];
+let DATA = { machines: [], projects: [], models: [], accounts: [], hits: [] };
+// accounts: by the name an account is shown under, its plan key and price a month; a price of 0 is a
+// sponsored seat, none an account without a known plan. Both stay out of the plan multiple.
+let META = { accounts: {}, updated: '', machines: 0, first: '', last: '', prices: '' };
+// The account filter and chart option only mean something with more than one account
+let SEVERAL_ACCOUNTS = false;
+let ALL = [], MIN = '', MAX = '';
+let failure = null; // why there is no data: a key of the strings, or an error message
+
+let lang = /^tr/i.test(navigator.language || '') ? 'tr' : 'en';
 try { const saved = localStorage.getItem('cc-cost-lang'); if (saved && STRINGS[saved]) lang = saved; } catch (e) {}
 let L = STRINGS[lang] || STRINGS.en;
 // 'system', 'light' or 'dark'; the <head> script already applied a saved choice before the first paint
@@ -402,13 +407,74 @@ const NF = new Intl.NumberFormat('en-US');
 const tok = (n) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
 const pct = (a, b) => (b ? a / b * 100 : 0).toFixed(1) + '%';
 const DAY = 86400000;
-// Calendar day in the zone the snapshots were split by
-const iso = (t) => new Date(t).toLocaleDateString('sv-SE', { timeZone: META.timezone });
+// Calendar day where the page is viewed
+const iso = (t) => new Date(t).toLocaleDateString('sv-SE');
 const hue = (i) => 'var(--hue-' + i + ')';
 const modelHue = (m) => hue(ORDER.indexOf(m) < 0 ? 8 : ORDER.indexOf(m) + 1);
+const planName = (p) => p === 'free' ? L.sponsored : p ? (CC.PLAN_NAMES[p] || p) : '';
 
-const ALL = [...new Set(ROWS.map(r => r.d))].sort();
-const MIN = ALL[0] || iso(Date.now()), MAX = ALL[ALL.length - 1] || iso(Date.now());
+async function get(p) {
+  const r = await fetch(p, { cache: 'no-store' });
+  if (!r.ok) throw new Error(p + ': HTTP ' + r.status);
+  return r.json();
+}
+
+// The machines' snapshots and the price table from the folder this page is in, priced and grouped
+async function load() {
+  if (location.protocol === 'file:') throw new Error('openWith');
+  const names = await get('machines/index.json');
+  // a machine whose files are missing or half-synced is left out of this view, not the whole page
+  const snaps = (await Promise.all(names.map(async (m) => {
+    try {
+      // a header with its months; a machine still on the original cc-cost.mjs has only its file in the root
+      const h = await get('machines/' + encodeURIComponent(m) + '.json').catch(() => null);
+      if (!h) {
+        const v = await get(encodeURIComponent(m) + '.json');
+        return CC.isLegacy(v) ? CC.fromLegacy(v, m) : null;
+      }
+      const months = h.months ? await Promise.all(h.months.map((mo) => get('machines/' + encodeURIComponent(m) + '/' + mo + '.json'))) : [];
+      return CC.join(h, months);
+    } catch (e) {
+      console.warn(m, e);
+      return null;
+    }
+  }))).filter(Boolean);
+  let stored = null;
+  try { stored = await get('pricing.json'); } catch (e) { /* none yet: the bundled prices */ }
+  const table = CC.storedTable(stored);
+  const priced = CC.priceRows(snaps, table);
+  const key = (r) => [r.d, r.machine, CC.modelLabel(r), r.p, r.s, CC.agentOf(r), r.k || '', r.x || '', r.accountName].join('\0');
+  ROWS = [...CC.groupBy(priced.rows, key)].map(([k, t]) => {
+    const [d, machine, model, project, session, agent, skill, mcp, account] = k.split('\0');
+    const n = (i) => t.t[i] || 0;
+    return { d, machine, model, project, session, agent, skill, mcp, account, calls: n(T.calls), c: t.cost,
+      ci: t.c[0], cw: t.c[1], cr: t.c[2], co: t.c[3], cx: t.c[4], ctx: CC.contextTokens(t.t), read: n(T.read), out: n(T.output),
+      maxCtx: n(T.maxContext), b: [n(T.ctx50k), n(T.ctx200k), n(T.ctx500k), n(T.ctxOver500k)] };
+  });
+  const uniq = (f) => [...new Set(ROWS.map(f))].sort();
+  // Rate-limit hits at the local time of the machine that recorded them
+  const zones = Object.fromEntries(snaps.map((s) => [s.machine, s.timezone]));
+  const hits = priced.limits.filter((l) => l.status === 'rejected').map((l) => {
+    const k = CC.localClock(zones[l.machine] || 'UTC')(l.ts);
+    return [k.d, String(k.h).padStart(2, '0') + ':' + String(k.min).padStart(2, '0'), l.machine, l.type, l.accountName];
+  });
+  DATA = { machines: uniq(r => r.machine), projects: uniq(r => r.project), models: uniq(r => r.model), accounts: uniq(r => r.account), hits };
+  // Usage from before accounts were told apart takes the plan setting of the machine synced last
+  const latest = [...snaps].sort((a, b) => b.updated.localeCompare(a.updated));
+  const fallback = (latest.find((s) => s.plan) || {}).plan;
+  const accounts = {};
+  for (const r of priced.rows) {
+    if (accounts[r.accountName]) continue;
+    const a = priced.accounts.get(r.account);
+    const plan = (a && a.plan) || (r.account === UNKNOWN ? fallback : undefined);
+    accounts[r.accountName] = { plan, price: CC.planPrice(plan, a && a.price), beta: CC.isBetaPlan(plan) && !(a && a.price !== undefined) };
+  }
+  ALL = uniq(r => r.d);
+  MIN = ALL[0] || iso(Date.now()); MAX = ALL[ALL.length - 1] || iso(Date.now());
+  META = { accounts, updated: latest.length ? latest[0].updated : '', machines: snaps.length, first: ALL[0] || '', last: ALL[ALL.length - 1] || '',
+    prices: (table.source === 'bundled' ? 'bundled' : 'platform.claude.com') + ' ' + table.date.slice(0, 10) };
+  SEVERAL_ACCOUNTS = DATA.accounts.length > 1;
+}
 
 let days = 30;        // preset: 1 = today, -1 = yesterday, 0 = all
 let custom = null;    // {from, to}; overrides the preset while set
@@ -510,9 +576,10 @@ function applyText() {
   for (const e of document.querySelectorAll('[data-t-title]')) e.title = L[e.dataset.tTitle];
   for (const b of document.querySelectorAll('[data-lang]')) b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
   showTheme();
-  const updated = new Date(META.updated).toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US', { timeZone: META.timezone });
-  document.getElementById('note').textContent = fill(L.note, { updated, machines: META.machines, min: META.first || '–', max: META.last || '–', prices: META.prices });
-  document.getElementById('footText').textContent = fill(L.footer, { version: META.version });
+  const updated = new Date(META.updated).toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US');
+  document.getElementById('note').textContent = failure ? (L[failure] || failure)
+    : META.updated ? fill(L.note, { updated, machines: META.machines, min: META.first || '–', max: META.last || '–', prices: META.prices }) : L.loading;
+  document.getElementById('footText').textContent = fill(L.footer, { version: BUILD.version });
   fillSelect('fMachine', DATA.machines, L.allMachines, sel.machine);
   fillAccountRow();
   document.getElementById('byAccount').hidden = !SEVERAL_ACCOUNTS;
@@ -545,7 +612,7 @@ function render() {
   const paidCost = paidRows.reduce((s, r) => s + r.c, 0);
   // over the days the paid accounts were in use, so an account added later is not diluted by days before it
   const paidSpan = calendarSpan([...new Set(paidRows.map(r => r.d))].sort());
-  const plans = [...new Set(paid.map(a => META.accounts[a].plan || a))].join(' + ');
+  const plans = [...new Set(paid.map(a => planName(META.accounts[a].plan) || a))].join(' + ');
   const multL = document.getElementById('tMultL');
   multL.textContent = price ? fill(L.planMultipleOf, { plans, price: '$' + price }) : L.noPaidPlan;
   if (paid.some(a => META.accounts[a].beta)) {
@@ -612,7 +679,7 @@ function drawAccounts(rs, total) {
     card.addEventListener('click', () => pickAccount(a));
     const n = document.createElement('p'); n.className = 'n';
     const name = document.createElement('b'); name.textContent = a;
-    const plan = document.createElement('span'); plan.textContent = meta.plan || '–';
+    const plan = document.createElement('span'); plan.textContent = planName(meta.plan) || '–';
     if (meta.beta) { const b = document.createElement('span'); b.className = 'beta'; b.textContent = 'beta'; b.title = L.betaTitle; plan.append(b); }
     n.append(name, plan);
     const v = document.createElement('p'); v.className = 'v'; v.textContent = $$(g.c);
@@ -911,11 +978,15 @@ themeMenu.addEventListener('keydown', (e) => {
 for (const b of themeItems) b.addEventListener('click', () => { setTheme(b.dataset.themeSet); closeMenu(true); });
 document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.theme')) closeMenu(false); });
 
+// Served by cc-cost report: the server stops once the page stops reporting itself open. Elsewhere the
+// first request is answered otherwise, and that is the end of it.
+fetch('alive', { method: 'POST' }).then((r) => {
+  if (r.status === 204) setInterval(() => fetch('alive', { method: 'POST' }).catch(() => {}), 5000);
+}).catch(() => {});
+
 addEventListener('resize', render);
-applyText();
-syncInputs();
-render();
+const show = () => { applyText(); syncInputs(); render(); };
+show();
+load().then(show).catch((e) => { failure = e.message; applyText(); });
 </script></body></html>`;
-    fs.writeFileSync(file, html);
-    return file;
 }
