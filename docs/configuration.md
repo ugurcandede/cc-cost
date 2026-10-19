@@ -9,14 +9,14 @@ a terminal; `cc-cost config set <key> <value>` changes one. The file is
 
 | Key | Default | Meaning |
 |---|---|---|
-| `syncDir` | `<config dir>/data` | The folder shared between machines. With the default, only this machine is counted |
+| `syncDir` | `<config dir>/data` | The folder shared between machines. With the default, only this machine is counted; with `remote`, the data is on the server instead |
 | `machine` | hostname | Name this machine appears under |
 | `lang` | `en` | Interface language: `en` or `tr` |
 | `timezone` | system zone | IANA zone that decides where one day ends |
 | `plan` | `max5x` | Plan for usage that belongs to no account (synced before accounts were told apart); each account has its own, below |
 | `anonymizeProjects` | `false` | `true` stores a hash of each project name instead of the name |
-| `pricing` | | Price overrides, below. Edit the file for this one |
-| `remote` | | `user@host:path` of a server to share through over SSH; see [below](#your-own-server-over-ssh-raspberry-pi-home-server-vps) |
+| `pricing` | | Price overrides of cc-cost 1.x; copied into `pricing.json` in the data folder on the next sync, see [below](#price-overrides) |
+| `remote` | | `user@host:path` of a server that keeps the data, reached over SSH; see [below](#your-own-server-over-ssh-raspberry-pi-home-server-vps) |
 | `claudeDirs` | `~/.claude`, `~/.config/claude` | Claude Code data folders to read, one per account; comma-separated with `config set`. Overrides `CLAUDE_CONFIG_DIR` |
 | `accounts` | | Name, plan and price per Claude account; set in `setup` or `cc-cost config` → Claude accounts |
 | `unassigned` | | The account this machine's usage from before accounts were told apart belongs to |
@@ -36,12 +36,15 @@ to use another folder, pick **Another folder…** and type its path.
 list of folders, where a second Claude Code folder keeps its login, and the Team prices. cc-cost shows
 the same yellow mark wherever these appear.
 
-Each machine writes only `machines/<machine>.json`, so the sync service never sees two writers on one
-file. `dashboard.html` is the exception: every machine rewrites it. If two do so at the same moment your
-sync service may keep a "conflicted copy"; delete it.
+Each machine writes only its own files, `machines/<machine>.json` and `machines/<machine>/<month>.json`,
+so the sync service never sees two writers on one file. Two files are shared: `dashboard.html`, which a
+machine writes only when its cc-cost is newer than the one the page came from, and `pricing.json`,
+refreshed at most once a day by whichever machine syncs first. A "conflicted copy" of either can be
+deleted.
 
-Machine names come from the hostname. If a hostname changes, a new file appears and the old one keeps
-counting; delete the old file if that machine is gone, or set `machine` to keep the old name.
+Machine names come from the hostname. If a hostname changes, new files appear and the old ones keep
+counting; delete `machines/<old name>.json` and `machines/<old name>/` if that machine is gone, or set
+`machine` to keep the old name.
 
 ### Your own server over SSH: Raspberry Pi, home server, VPS
 
@@ -50,10 +53,13 @@ is installed anywhere: cc-cost runs the `ssh` and `scp` that come with macOS, Li
 later, and the server needs only an SSH server and a POSIX shell (Raspberry Pi OS, any Linux, a NAS).
 cc-cost does not run on the server.
 
-After each sync, cc-cost uploads this machine's `machines/<machine>.json` to the server and downloads the
-other machines' files into the local `syncDir`, then reports from there. The local folder stays the
-working copy: when the server can't be reached, `sync` prints one warning, reports from the copies it
-already has, and sends the file on the next run.
+The server keeps the data and nothing stays on the machines but `config.json`. Every command pulls the
+server's folder into a temporary folder, works there and pushes back the files it changed, so a report
+needs the server as much as a sync does: when it can't be reached, the command stops with ssh's message;
+only `status` and `config` go on without it.
+`cc-cost report` serves the pulled copy on localhost, in a process that stops once the page is closed, and opens it. To open the dashboard from a phone or
+another computer, serve the folder with any web server on the server (`python3 -m http.server` in it,
+nginx, …): the page reads the files next to it.
 
 1. **Key login.** The daily schedule and the Claude Code hook cannot type a password, so log in with a
    key that has no passphrase, or one held by an agent that is running when the schedule fires.
@@ -102,20 +108,22 @@ already has, and sends the file on the next run.
 3. Run `cc-cost`. It prints `exchanged with pi@raspberrypi.local:cc-cost`; `cc-cost status` shows the
    server. To stop, `cc-cost config set remote ""`.
 
-`--offline` also skips the server. A remote can be combined with a cloud folder as `syncDir`, but one
-of the two is enough.
+`--offline` skips the pricing page and the version check, not the server. `--sync-dir <path>` (or
+`CC_COST_DIR`) uses that folder for a run instead of the server.
 
 A network share mounted from the server (SMB or NFS) also works as `syncDir`, without `remote`, but only
 while it is mounted: away from home, or with the server off, `sync` fails.
 
 ## Price overrides
 
-Prices come from Anthropic's pricing page (see [how-it-works.md](how-it-works.md#prices)). To use your
-own, for a negotiated rate or a model the page doesn't list yet, add them in $ per million tokens:
+Prices come from Anthropic's pricing page (see [how-it-works.md](how-it-works.md#prices)) into
+`pricing.json` in the data folder (on the server, with `remote`). To use your own, for a negotiated rate
+or a model the page doesn't list yet, add them to that file under `overrides`, in $ per million tokens;
+the rest of the file is rewritten daily, `overrides` is kept:
 
 ```json
 {
-  "pricing": {
+  "overrides": {
     "claude-opus-5": [5, 6.25, 10, 0.5, 25],
     "claude-opus-5-fast": [10, 12.5, 20, 1, 50]
   }
@@ -124,7 +132,8 @@ own, for a negotiated rate or a model the page doesn't list yet, add them in $ p
 
 The order is input, cache write 5 minutes, cache write 1 hour, cache read, output. A `-fast` key prices
 fast-mode calls. A model with no price anywhere is left out of every total and listed at the end of the
-output as "No price for".
+output as "No price for". The `pricing` key of a cc-cost 1.x config is copied there on the next sync, if
+the file has no `overrides` yet.
 
 ## Environment
 
@@ -184,5 +193,5 @@ the e-mail address and name in `.claude.json` are never read into a snapshot.
 
 Reports make at most two network requests a day: the public pricing page, and the npm registry to see
 whether a newer cc-cost is out. Neither sends anything about your usage. `--offline` turns both off;
-`--json`, `--csv` and `--quiet` skip the version check. With `remote` set, each sync also copies the
-snapshot files described above to and from your server over SSH; `--offline` skips that as well.
+`--json`, `--csv` and `--quiet` skip the version check. With `remote` set, every command copies the
+files described above from and to your server over SSH.

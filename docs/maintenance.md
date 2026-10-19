@@ -19,7 +19,7 @@ Linux (`Persistent=true`). launchd catches up after sleep but not after a shutdo
 **SessionEnd hook**
 
 Added to `~/.claude/settings.json`, so each Claude Code session is synced when it ends. The hook runs
-synchronously with a 60-second timeout; a sync takes about a second. Other hooks in the file are kept,
+synchronously with a 60-second timeout; a sync takes about a second, a few with a server over SSH. Other hooks in the file are kept,
 and the file is copied once to `settings.json.cc-cost.bak` before the first change. If cc-cost moves,
 running `setup` again updates the hook instead of adding a second one.
 
@@ -77,9 +77,27 @@ synced.
 
 A model the pricing page lists is priced the day after it appears (sooner with `cc-cost pricing
 --refresh`). Until then it is left out of the totals and named in "No price for" at the end of the
-output; add it under `pricing` in the config to count it right away. Chart colors are fixed per model in
+output; add it under `overrides` in `pricing.json` to count it right away. Chart colors are fixed per model in
 `src/dashboard.ts` (`ORDER`); a new model gets the eighth color until it is added there, at the end of
 the list so existing colors don't shift.
+
+## Moving from cc-cost 1.x
+
+Update every machine (`cc-cost update`, or `npm i -g @ugurcandede/cc-cost@latest`) and run any command
+on each; the schedule and the hook keep working, since the installed path does not change. What changes
+on the way:
+
+- A machine's data moves from one `machines/<machine>.json` to a header there and one file per month in
+  `machines/<machine>/`, on its first sync. Until every machine is updated, the ones still on 1.x see only
+  each other, because 1.x does not read the new layout; updated machines read both.
+- `dashboard.html` no longer carries the usage: `cc-cost report` serves the folder and opens the page,
+  and a double-clicked copy says so. A machine still on 1.x rewrites the page with its own on every sync
+  and an updated one writes it back, which is harmless: `report` always serves the current one.
+- Prices live in `pricing.json` in the data folder. The `pricing` overrides of a 1.x config are copied
+  there on the first sync, and the old `pricing-cache.json` in the config folder is removed.
+- With `remote`, the data is on the server only. The local `syncDir` of 1.x is neither read nor written
+  any more and can be deleted once `cc-cost machines` shows every machine. `--offline` no longer skips
+  the server; `--sync-dir` does.
 
 ## Moving from the original cc-cost.mjs
 
@@ -124,6 +142,10 @@ yarn build            # compiles to dist/ for npm
 The snapshot format (`src/types.ts`) outlives the transcripts it was built from: add fields at the end,
 never change the meaning of an existing one.
 
+The dashboard prices the files in the browser with the same code as the terminal: `dashboard.ts` embeds
+`types.ts`, `plans.ts`, `pricing.ts`, `aggregate.ts` and `months.ts` into the page with their types
+stripped, so those five import nothing but each other and use no `node:` API.
+
 Where things are, in the order data flows through them:
 
 | File | Does |
@@ -131,13 +153,13 @@ Where things are, in the order data flows through them:
 | `cli.ts` | Flags, settings, the commands; `status` |
 | `wizard.ts` | The questions `setup` and `config` ask in a terminal |
 | `prompt.ts` | Arrow-key menus, checklists and text input for the wizard |
-| `paths.ts`, `config.ts` | Claude Code folders, the config file, plans |
+| `paths.ts`, `config.ts`, `plans.ts` | Claude Code folders, the config file, plans |
 | `accounts.ts` | Which account a Claude folder is logged in to, and its plan |
 | `scan.ts` | Transcripts → rows per day, project, session, model, account |
-| `snapshot.ts`, `sync.ts` | The per-machine file, the archive merge, a sync run |
-| `remote.ts` | The exchange with an SSH server |
-| `pricing.ts`, `aggregate.ts` | Prices, costing, filters, totals |
-| `reports.ts`, `dashboard.ts` | Terminal reports, the HTML dashboard |
+| `snapshot.ts`, `months.ts`, `sync.ts` | The per-machine files, one per month; the archive merge; a sync run |
+| `remote.ts` | The mirror of the folder on an SSH server |
+| `pricing.ts`, `prices.ts`, `aggregate.ts` | Prices and `pricing.json`, costing, filters, totals |
+| `reports.ts`, `dashboard.ts`, `serve.ts` | Terminal reports; the dashboard page; the local server behind `report` |
 | `setup.ts` | Synced folders, the schedule, the Claude Code hook |
 | `i18n.ts`, `format.ts` | Every user-facing string in both languages; tables and colors |
 

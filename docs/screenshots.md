@@ -1,9 +1,9 @@
 # A tour of cc-cost
 
-## One file, every machine
+## One page, every machine
 
-`cc-cost report` opens `dashboard.html`: a single file in the shared folder, no server, nothing to
-install on the machine that opens it. The last 30 days across both machines and both accounts, with the
+`cc-cost report` opens `dashboard.html`: one page beside the data, which it reads when opened, served
+on localhost by cc-cost or by any web server on your own server. The last 30 days across both machines and both accounts, with the
 daily cost stacked by model.
 
 ![The dashboard: filters, the total with a card per account, and the daily cost chart](assets/dashboard-dark.png)
@@ -77,7 +77,7 @@ remembered in the browser. The language switches on the page, with the same data
 Every number on the dashboard is also a terminal report, with the same filters (`--last`, `--account`,
 `--machine`, `--project`, `--model`, ...) and `--json` or `--csv` for scripts.
 
-`cc-cost` alone syncs this machine, rewrites the dashboard and prints the summary: by month, account,
+`cc-cost` alone syncs this machine and prints the summary: by month, account,
 machine, model, project and token type.
 
 ![cc-cost: the summary](assets/terminal-summary.png)

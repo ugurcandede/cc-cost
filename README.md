@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/assets/logo.svg" alt="cc-cost" width="88">
   <h1>cc-cost</h1>
-  <p>What your Claude Code usage would cost at API list prices, totalled across all your machines (Windows, Mac, Linux), with an archive that outlives Claude Code's transcript cleanup and a dashboard you open with a double-click.</p>
+  <p>What your Claude Code usage would cost at API list prices, totalled across all your machines (Windows, Mac, Linux), with an archive that outlives Claude Code's transcript cleanup and a dashboard that reads the shared data wherever it is kept: a synced folder or your own server.</p>
   <br>
   <a href="https://www.npmjs.com/package/@ugurcandede/cc-cost" target="_blank"><img src="https://img.shields.io/npm/v/@ugurcandede/cc-cost?style=flat-square&label=version" alt="npm version"></a>
   <img src="https://img.shields.io/badge/Node.js-22%2B%20·%20zero%20dependencies-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 22+, zero dependencies">
@@ -42,6 +42,9 @@ to install: see [your own server](docs/configuration.md#your-own-server-over-ssh
 Yarn 2 and later have no global installs: install with npm, or try a report once with
 `yarn dlx @ugurcandede/cc-cost` (or `npx @ugurcandede/cc-cost`). `setup` needs a permanent install,
 since the schedule and hook point at it.
+
+Coming from cc-cost 1.x: update every machine; what changes is in
+[moving from 1.x](docs/maintenance.md#moving-from-cc-cost-1x).
 
 ## Prerequisites
 
@@ -94,7 +97,8 @@ cc-cost insights --lang tr        # interface language: en (default) or tr
   service in between.
 - **Several Claude accounts**: a Max account and a Team seat, each against its own plan, together or apart.
 - **History that stays**: numbers are kept after Claude Code deletes old transcripts.
-- **A dashboard in one file**: date, machine, project and model filters, works offline.
+- **A dashboard with nothing to run**: one page beside the data, served by `cc-cost report` or by any web
+  server on your own server; date, machine, account, project and model filters.
 - **Insights, not just totals**: context size per call, cache hit ratio, subagents, skills, MCP servers,
   the costliest sessions.
 - **Current prices**: read from Anthropic's pricing page daily, with a bundled fallback.
@@ -124,14 +128,20 @@ cc-cost insights --lang tr        # interface language: en (default) or tr
 
 ## Layout
 
-What cc-cost keeps in the shared folder:
+What cc-cost keeps in the data folder, the shared folder or the folder on your server:
 
 ```
-<shared folder>/
+<data folder>/
 ├── machines/
-│   ├── work-pc.json        # one per machine, written only by that machine
-│   └── macbook.json
-└── dashboard.html          # rewritten on every sync
+│   ├── index.json          # the machines, for the dashboard
+│   ├── work-pc.json        # one per machine, written only by that machine: time zone, accounts, months
+│   ├── work-pc/
+│   │   ├── 2026-09.json    # that machine's usage, one file per month
+│   │   └── 2026-10.json
+│   ├── macbook.json
+│   └── macbook/
+├── pricing.json            # prices read from the pricing page once a day, and your own under "overrides"
+└── dashboard.html          # the dashboard: one static page that reads the files above when opened
 ```
 
 and on each machine:
@@ -139,9 +149,11 @@ and on each machine:
 ```
 ~/.config/cc-cost/          # %APPDATA%\cc-cost on Windows
 ├── config.json             # cc-cost config
-├── pricing-cache.json      # last prices read from the pricing page
 └── update-check.json       # when the npm registry was last asked for a newer version
 ```
+
+With a server over SSH, the data folder is on the server and nothing else is kept on the machines: each
+command pulls the folder, works on it and pushes back what it changed.
 
 ## Safety
 
@@ -149,7 +161,8 @@ and on each machine:
   session and model, plus rate-limit events. Project names can be hashed (`anonymizeProjects`).
 - **The archive only grows.** A day older than Claude Code's cleanup window is never overwritten by a
   scan that may see only part of it.
-- **No sync conflicts.** Each machine writes only its own file, through write-then-rename.
+- **No sync conflicts.** Each machine writes only its own files, through write-then-rename; the dashboard
+  page is written once per cc-cost version.
 - **Your Claude Code settings are backed up** to `settings.json.cc-cost.bak` before the hook is added;
   other hooks are left alone. `cc-cost setup --remove` takes the schedule and the hook away.
 - Read-only toward transcripts: cc-cost never modifies `~/.claude/projects`.
