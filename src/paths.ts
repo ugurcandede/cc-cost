@@ -57,3 +57,7 @@ export function retentionDays(dirs: string[]): number {
 }
 
 export const defaultMachine = () => os.hostname().replace(/[^A-Za-z0-9._-]/g, '_');
+
+// A machine name names files (machines/<name>.json, machines/<name>/): nothing a file system refuses, no
+// dot or space at either end, and not "index", which names the list of machines
+export const validMachine = (name: string) => /^[^\\/:*?"<>|\x00-\x1f]+$/.test(name) && !/^[ .]|[ .]$/.test(name) && name !== 'index';

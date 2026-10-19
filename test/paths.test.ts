@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { tempDir } from './tmp.ts';
-import { claudeDirs, parseDirs } from '../src/paths.ts';
+import { claudeDirs, parseDirs, validMachine } from '../src/paths.ts';
 
 // A Claude Code data folder: only folders with a projects/ subfolder count
 const claudeDir = () => {
@@ -16,6 +16,11 @@ const claudeDir = () => {
 test('parseDirs: comma-separated, trimmed, ~ is the home folder', () => {
     assert.deepEqual(parseDirs(' ~/.claude , ,~/.claude-work'), [path.join(os.homedir(), '.claude'), path.join(os.homedir(), '.claude-work')]);
     assert.deepEqual(parseDirs(''), []);
+});
+
+test('validMachine: a name that can be a file name, and not the list of machines', () => {
+    for (const ok of ['work-pc', 'Work PC', 'Uğurcan', 'm.local']) assert.ok(validMachine(ok), ok);
+    for (const bad of ['', 'work/pc', 'a\\b', 'c:', 'a?b', 'index', '.hidden', 'pc ']) assert.ok(!validMachine(bad), bad);
 });
 
 test('claudeDirs: the configured list wins over CLAUDE_CONFIG_DIR', (t) => {
