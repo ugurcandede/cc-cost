@@ -6,9 +6,10 @@ import { tempDir } from './tmp.ts';
 import { detectAccount, planOf } from '../src/accounts.ts';
 import { applyFilter, priceRows } from '../src/aggregate.ts';
 import { planPrice } from '../src/config.ts';
+import { emptySnapshot } from '../src/months.ts';
 import { BUNDLED } from '../src/pricing.ts';
 import { scan } from '../src/scan.ts';
-import { emptySnapshot, merge } from '../src/snapshot.ts';
+import { merge } from '../src/snapshot.ts';
 import { T_LEN, UNKNOWN, type Row, type Snapshot } from '../src/types.ts';
 
 // A Claude Code folder logged in to the given account

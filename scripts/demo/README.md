@@ -91,7 +91,7 @@ scripts/demo/demo.sh demo-pc             # downloads demo-mac's file
 
 scripts/demo/demo.sh demo-pc machines    # demo-pc 42 calls, demo-mac 40
 scripts/demo/demo.sh demo-pc models      # Opus, Sonnet and Haiku together
-scripts/demo/demo.sh server              # demo-pc.json and demo-mac.json on the server
+scripts/demo/demo.sh server              # both machines' files on the server
 ```
 
 ## 3. Accounts and plans
@@ -108,27 +108,28 @@ scripts/demo/demo.sh demo-pc plan               # each account against its own p
 scripts/demo/demo.sh demo-pc blocks --last 1    # 5-hour windows, one timeline per account
 scripts/demo/demo.sh demo-pc models --account work
 scripts/demo/demo.sh demo-pc config             # Claude accounts: rename, change a plan, a sponsored seat
-scripts/demo/demo.sh demo-pc report --location  # open the printed dashboard.html: account buttons above the
-                                                # filters, a card per account in the total, chart by account
+scripts/demo/demo.sh demo-pc report             # serves the folder and opens the dashboard (see the browser on
+                                                # Windows): account buttons above the filters, a card per account
+                                                # in the total, chart by account
 ```
 
 Usage from before accounts were told apart has no account. To see the question setup asks about it, give
-demo-pc a day like that and run `config` → Claude accounts → Usage from before accounts:
+demo-pc a month like that on the server and run `config` → Claude accounts → Usage from before accounts:
 
 ```bash
-node -e "const f=process.argv[1],fs=require('fs'),s=JSON.parse(fs.readFileSync(f));s.rows.push({d:'2026-07-01',p:'old',s:'old',m:'claude-opus-5',t:[1e6,0,0,0,0,3,0,0,0,0,0,0,0,0]});fs.writeFileSync(f,JSON.stringify(s))" "$(d="${TMPDIR:-/tmp}/cc-cost-demo/demo-pc"; cygpath -w "$d/AppData/Roaming/cc-cost/data/machines/demo-pc.json" 2>/dev/null || echo "$d/.config/cc-cost/data/machines/demo-pc.json")"
+docker exec cc-cost-demo-sshd sh -c 'cd /config/cc-cost/machines && echo "{\"rows\":[{\"d\":\"2026-07-01\",\"p\":\"old\",\"s\":\"old\",\"m\":\"claude-opus-5\",\"t\":[1000000,0,0,0,0,3,0,0,0,0,0,0,0,0]}],\"hourly\":[],\"sessions\":{},\"limits\":[]}" > demo-pc/2026-07.json && sed -i "s/\"months\":\[/\"months\":[\"2026-07\",/" demo-pc.json'
 scripts/demo/demo.sh demo-pc accounts --no-sync # $5 under (unknown)
 scripts/demo/demo.sh demo-pc config             # give it to an account
 ```
 
 ## 4. Testing SSH
 
-**The server is down.** cc-cost warns once and reports from the copies it already has:
+**The server is down.** The data lives there, so every command but `status` and `config` stops with ssh's message:
 
 ```bash
 scripts/demo/demo.sh server-stop
 scripts/demo/demo.sh demo-pc
-# could not reach demo-pi:cc-cost, using the local copies: ssh: connect to host 127.0.0.1 port 2222: Connection refused
+# could not reach demo-pi:cc-cost: ssh: connect to host 127.0.0.1 port 2222: Connection refused
 ```
 
 **It comes back.** The same container starts again, with its files and host key:
@@ -171,8 +172,9 @@ it is saved at once. `config --json` prints the settings instead.
 ## The browser on Windows
 
 Opening the dashboard from the demo starts the browser with the demo machine's AppData, so it creates a
-fresh browser profile in the demo folder. Answer No to "Open the dashboard?" and open the printed
-`dashboard.html` yourself.
+fresh browser profile in the demo folder. Answer No to "Open the dashboard?"; `scripts/demo/demo.sh
+demo-pc report` prints the address it serves the dashboard at, so paste that into your own browser and
+close the one it opened; the server stops by itself once no page is open.
 
 ## Port
 

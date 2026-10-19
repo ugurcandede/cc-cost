@@ -33,6 +33,7 @@ test('remote: why an address was refused', () => {
 test('remote: ssh failures told apart, and the parts a hint names', () => {
     assert.equal(sshFailure('demo-pi@127.0.0.1: Permission denied (publickey,keyboard-interactive).'), 'auth');
     assert.equal(sshFailure('ssh: connect to host 127.0.0.1 port 2222: Connection refused'), 'refused');
+    assert.equal(sshFailure('Connection closed by 127.0.0.1 port 2222'), 'refused', 'a port that answers but speaks no SSH');
     assert.equal(sshFailure('ssh: Could not resolve hostname nope: Name or service not known'), 'resolve');
     assert.equal(sshFailure('@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@'), 'hostkey');
     assert.equal(sshFailure('ssh: connect to host 10.0.0.9 port 22: Connection timed out'), 'timeout');

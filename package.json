@@ -1,7 +1,7 @@
 {
   "name": "@ugurcandede/cc-cost",
   "version": "1.0.0",
-  "description": "API-equivalent cost of your Claude Code usage across all your machines, with an archive that outlives transcript cleanup and an offline dashboard.",
+  "description": "API-equivalent cost of your Claude Code usage across all your machines, with an archive that outlives transcript cleanup and a dashboard that reads the shared data wherever it is kept.",
   "keywords": [
     "claude",
     "claude-code",

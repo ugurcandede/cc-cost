@@ -17,6 +17,7 @@ fs.writeFileSync(path.join(claude, 'projects', 'app', 's.jsonl'), JSON.stringify
 const env = {
     ...process.env, HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'), XDG_CONFIG_HOME: path.join(home, '.config'),
     CLAUDE_CONFIG_DIR: claude, CC_COST_DIR: path.join(home, 'sync'), NO_COLOR: '1',
+    CC_COST_TASK: 'cc-cost-test', // never the real scheduled task of this machine
 };
 const cli = path.join(import.meta.dirname, '..', 'src', 'cli.ts');
 const run = (...args: string[]) => {
@@ -58,6 +59,9 @@ test('cli: config set checks languages, plans, time zones and remotes', () => {
     assert.equal(run('config', 'set', 'timezone', 'Mars/Base').code, 1);
     assert.equal(run('config', 'set', 'remote', 'pi@host:2222:cc-cost').code, 1);
     assert.equal(run('config', 'set', 'nope', 'x').code, 1);
+    assert.equal(run('config', 'set', 'machine', 'work/pc').code, 1, 'a machine name names files');
+    assert.equal(run('config', 'set', 'machine', 'index').code, 1, 'index.json is the list of machines');
+    assert.equal(run('config', 'set', 'machine', 'Work PC').code, 0);
     assert.equal(run('config', 'set', 'lang', 'tr').code, 0);
     assert.equal(run('config', 'set', 'plan', 'pro').code, 0);
     const shown = JSON.parse(run('config', '--json').out.split('\n').slice(1).join('\n'));

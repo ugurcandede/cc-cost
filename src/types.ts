@@ -1,5 +1,5 @@
-// Snapshot format, schema 2. Everything here is synced between machines and outlives the
-// transcripts it came from, so fields are append-only: never repurpose an index or a key.
+// Snapshot format: schema 3 on disk, schema 2 still read. Everything here is synced between machines
+// and outlives the transcripts it came from, so fields are append-only: never repurpose an index or a key.
 
 // Positions in a token counter array (Row.t, HourRow.t).
 export const T = {
@@ -70,8 +70,10 @@ export interface AccountMeta {
     folder?: string; // the Claude Code folder's name, the label when no name was given
 }
 
+// A machine's data as it is read: every month together. Schema 2 files hold all of it in one file;
+// schema 3 keeps a header (machine, timezone, accounts, the list of months) beside one file per month.
 export interface Snapshot {
-    schema: 2;
+    schema: 2 | 3;
     machine: string;
     updated: string;
     timezone: string;
@@ -81,6 +83,14 @@ export interface Snapshot {
     limits: LimitEvent[];
     accounts?: Record<string, AccountMeta>; // by account id
     unassigned?: string; // the account this machine's rows without one belong to, as the user chose
+    plan?: string; // the plan setting on this machine, for rows that belong to no account
 }
+
+// Schema 3 on disk: machines/<machine>.json, and machines/<machine>/<YYYY-MM>.json for each month listed
+export interface Header extends Omit<Snapshot, 'schema' | 'rows' | 'hourly' | 'sessions' | 'limits'> {
+    schema: 3;
+    months: string[];
+}
+export type MonthFile = Pick<Snapshot, 'rows' | 'hourly' | 'sessions' | 'limits'>;
 
 export const UNKNOWN = '(unknown)';

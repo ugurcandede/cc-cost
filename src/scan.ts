@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { localClock } from './aggregate.ts';
 import { normModel } from './pricing.ts';
 import { CTX_BOUNDS, T, T_LEN, UNKNOWN, type HourRow, type LimitEvent, type Row, type SessionMeta } from './types.ts';
 
@@ -83,18 +84,6 @@ function listJsonl(dir: string, out: string[]) {
         if (e.isDirectory()) listJsonl(p, out);
         else if (e.name.endsWith('.jsonl')) out.push(p);
     }
-}
-
-// ISO timestamp -> local date and hour in the given IANA zone
-export function localClock(timezone: string) {
-    const fmt = new Intl.DateTimeFormat('en-CA', {
-        timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-    });
-    return (iso: string) => {
-        const p: Record<string, string> = {};
-        for (const part of fmt.formatToParts(new Date(iso))) p[part.type] = part.value;
-        return { d: `${p.year}-${p.month}-${p.day}`, h: Number(p.hour), min: Number(p.minute) };
-    };
 }
 
 function addUsage(t: number[], u: Usage) {

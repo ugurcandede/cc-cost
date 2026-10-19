@@ -5,24 +5,23 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { namedAccounts, planText } from './accounts.ts';
-import { accountsOf, applyFilter, applyHourFilter, hourFilterable, matches, priceRows, type Filter } from './aggregate.ts';
-import { CONFIG_KEYS, configFile, isBetaPlan, loadConfig, PLAN_NAMES, planPrice, PLANS, saveConfig, type Config } from './config.ts';
+import { accountsOf, applyFilter, applyHourFilter, hourFilterable, localClock, matches, priceRows, type Filter } from './aggregate.ts';
+import { CONFIG_KEYS, configFile, loadConfig, planPrice, PLANS, saveConfig, type Config } from './config.ts';
 import { writeDashboard } from './dashboard.ts';
 import { paint, setColor, table } from './format.ts';
 import { fill, L, lang, LANGS, setLang } from './i18n.ts';
-import { claudeDirs, configDir, defaultMachine, defaultSyncDir, parseDirs, retentionDays } from './paths.ts';
-import { loadPrices } from './pricing.ts';
+import { claudeDirs, configDir, defaultMachine, defaultSyncDir, parseDirs, retentionDays, validMachine } from './paths.ts';
+import { loadPrices, pricingFile, seedOverrides } from './prices.ts';
 import { Cancelled } from './prompt.ts';
-import { remoteProblem, sshHint } from './remote.ts';
+import { openMirror, remoteProblem, sshHint, type Mirror } from './remote.ts';
 import {
     blocksReport, dimensionJson, dimensionReport, DIMENSIONS, insights, limitsInRange, periodJson, periodReport, PERIODS,
     planReport, renderCsv, renderTable, summary, summaryJson, type Dimension, type Period, type Report,
 } from './reports.ts';
-import { localClock } from './scan.ts';
+import { serveDetached, serveWhileOpen } from './serve.ts';
 import { claudeSettingsFiles, currentRunner, hookInstalled, scheduleInstalled } from './setup.ts';
 import { loadAll } from './snapshot.ts';
 import { dashboardPath, sync, type Settings } from './sync.ts';
-import { UNKNOWN } from './types.ts';
 import { installMethod, isNewer, latestVersion, updateCommand } from './update.ts';
 import { confirm, removeAutomation, settingsMenu, setup, type Wizard } from './wizard.ts';
 
@@ -67,7 +66,8 @@ const { values: opt, positionals } = parseArgs({
     },
 });
 
-// Settings come from, in order: flag, environment, config file, default
+// Settings come from, in order: flag, environment, config file, default. A folder given for this run
+// takes the place of the server.
 let config: Config = loadConfig();
 const resolveSettings = (): Settings => ({
     syncDir: path.resolve(opt['sync-dir'] ?? process.env.CC_COST_DIR ?? config.syncDir ?? defaultSyncDir()),
@@ -75,9 +75,9 @@ const resolveSettings = (): Settings => ({
     lang: opt.lang ?? config.lang ?? 'en',
     timezone: opt.tz ?? config.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
     anonymize: !!config.anonymizeProjects,
-    pricing: config.pricing ?? {},
+    plan: config.plan,
     claudeDirs: claudeDirs(config.claudeDirs),
-    remote: opt.offline ? undefined : config.remote || undefined,
+    remote: opt['sync-dir'] || process.env.CC_COST_DIR ? undefined : config.remote || undefined,
     accounts: config.accounts,
     unassigned: config.unassigned,
 });
@@ -95,6 +95,41 @@ function fail(message: string): never {
 // Menus need a terminal on both ends; --yes, CI and pipes take the defaults instead
 const interactive = !opt.yes && !!process.stdin.isTTY && !!process.stdout.isTTY;
 
+// With a server, the data folder is a mirror of the server's: pulled before the first read, pushed after
+// the command, removed on exit. Nothing of the data stays on this machine.
+let mirror: Mirror | undefined;
+let mirrorOf: string | undefined; // the server it came from
+// The mirror of a server, pulled now unless the open one is its. When the server can't be reached the
+// command stops, or with `soft` says so and goes on without.
+function mirrorFor(remote: string, soft: boolean): Mirror | undefined {
+    if (mirror && mirrorOf === remote) return mirror;
+    mirror?.close();
+    mirror = undefined;
+    try {
+        mirror = openMirror(remote);
+        mirrorOf = remote;
+    } catch (e) {
+        const reason = (e as Error).message;
+        const hint = sshHint(reason, remote);
+        const message = fill(L().remoteFailed, { remote, reason }) + (hint ? '\n  ' + hint : '');
+        if (!soft) fail(message);
+        console.error(message);
+    }
+    return mirror;
+}
+function ensureData(soft = false) {
+    if (!settings.remote) return;
+    const m = mirrorFor(settings.remote, soft);
+    if (m) settings.syncDir = m.dir;
+}
+function pushMirror(verbose: boolean) {
+    if (!mirror || mirrorOf !== settings.remote) return;
+    mirror.push();
+    if (verbose) out(fill(L().remoteSynced, { remote: settings.remote! }));
+}
+process.on('exit', () => mirror?.close());
+process.on('SIGINT', () => process.exit(130));
+
 // What the interactive questions read and write; saving refreshes the settings and the language
 const wizard: Wizard = {
     get config() {
@@ -109,6 +144,17 @@ const wizard: Wizard = {
         config = next;
         settings = resolveSettings();
         setLang(settings.lang);
+        // a mirror of another server is of no use now; the new one is pulled on the next read
+        if (mirror && mirrorOf !== settings.remote) {
+            mirror.close();
+            mirror = undefined;
+        } else if (mirror) settings.syncDir = mirror.dir;
+    },
+    // The data a config would read, for the questions about accounts: its server's mirror, pulled now
+    // (this machine's own folder when the server can't be reached), else its folder
+    dataDir(next) {
+        const m = next.remote ? mirrorFor(next.remote, true) : undefined;
+        return m ? m.dir : path.resolve(next.syncDir ?? defaultSyncDir());
     },
 };
 
@@ -147,57 +193,33 @@ const limitMatch = (f: Filter) => (l: { machine: string; accountName: string }) 
 
 // ---------- data
 
-const pricesCache = () => path.join(configDir(), 'pricing-cache.json');
 const updateCache = () => path.join(configDir(), 'update-check.json');
 
+// The page in the data folder; every machine writes it only when its copy is newer
+const dashboard = () => writeDashboard(dashboardPath(settings), { version: pkg.version, repo: REPO, npm: NPM, site: pkg.author.url });
+const dashboardWhere = () => (settings.remote ? `${settings.remote}/dashboard.html` : dashboardPath(settings));
+
 async function data(verbose: boolean) {
+    ensureData();
+    // what a cc-cost 1.x left: its price overrides go into pricing.json, its price cache in the config folder goes
+    if (config.pricing) seedOverrides(pricingFile(settings.syncDir), config.pricing);
+    fs.rmSync(path.join(configDir(), 'pricing-cache.json'), { force: true });
     if (!opt['no-sync']) {
         if (!settings.claudeDirs.length) console.error(L().noClaudeDirs);
         const r = await sync(settings);
-        if (r.remoteError) {
-            const hint = sshHint(r.remoteError, settings.remote!);
-            console.error(fill(L().remoteFailed, { remote: settings.remote!, reason: r.remoteError }) + (hint ? '\n  ' + hint : ''));
-        } else if (verbose && settings.remote) out(fill(L().remoteSynced, { remote: settings.remote }));
         if (verbose) {
             out(fill(L().scanned, { machine: settings.machine, files: r.scan.files, dupes: r.scan.duplicates }));
-            out(fill(L().snapshot, { file: r.file }) + (r.kept ? fill(L().kept, { n: r.kept }) : ''));
+            // the mirror is temporary: name the file where it stays
+            const file = settings.remote ? `${settings.remote}/${path.relative(settings.syncDir, r.file).replace(/\\/g, '/')}` : r.file;
+            out(fill(L().snapshot, { file }) + (r.kept ? fill(L().kept, { n: r.kept }) : ''));
         }
     }
-    const prices = await loadPrices(pricesCache(), { offline: opt.offline });
+    const prices = await loadPrices(pricingFile(settings.syncDir), { offline: opt.offline });
+    dashboard();
     const snaps = loadAll(settings.syncDir);
-    return { ...priceRows(snaps, prices.table, settings.pricing), prices, snaps };
+    return { ...priceRows(snaps, prices.table), prices, snaps };
 }
 type Data = Awaited<ReturnType<typeof data>>;
-
-function dashboard(d: Data) {
-    const dates = d.rows.map((r) => r.d).sort();
-    const t = d.prices.table;
-    // Each account's plan by the name it is shown under; usage from before accounts takes the plan setting
-    const accounts = Object.fromEntries([...new Set(d.rows.map((r) => r.account))].map((id) => {
-        const a = d.accounts.get(id);
-        const plan = a?.plan ?? (id === UNKNOWN ? config.plan : undefined);
-        const name = a?.label ?? d.rows.find((r) => r.account === id)!.accountName;
-        return [name, {
-            plan: plan === 'free' ? L().setup.sponsored : plan && (PLAN_NAMES[plan] ?? plan),
-            price: planPrice(plan, a?.price),
-            ...(isBetaPlan(plan) && a?.price === undefined && { beta: true }),
-        }];
-    }));
-    return writeDashboard(d, {
-        lang: settings.lang,
-        timezone: settings.timezone,
-        accounts,
-        updated: new Date().toISOString(),
-        machines: d.snaps.length,
-        first: dates[0] ?? '',
-        last: dates[dates.length - 1] ?? '',
-        prices: `${t.source === 'bundled' ? 'bundled' : 'platform.claude.com'} ${t.date.slice(0, 10)}`,
-        version: pkg.version,
-        repo: REPO,
-        npm: NPM,
-        site: pkg.author.url,
-    }, dashboardPath(settings));
-}
 
 async function footer(d: Data) {
     if (d.prices.note) out(fill(L().pricesFallback, { reason: d.prices.note, source: d.prices.table.source, date: d.prices.table.date.slice(0, 10) }));
@@ -210,13 +232,24 @@ async function footer(d: Data) {
     if (latest && isNewer(latest, pkg.version)) out('\n' + paint('yellow', fill(L().update.available, { latest, current: pkg.version })));
 }
 
-function openFile(file: string) {
+function openInBrowser(url: string) {
     const [cmd, args] =
-        process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', file]]
-        : process.platform === 'darwin' ? ['open', [file]]
-        : ['xdg-open', [file]];
-    // No browser opener (a server, SSH): the path printed alongside is enough, so ignore the failure.
+        process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', url]]
+        : process.platform === 'darwin' ? ['open', [url]]
+        : ['xdg-open', [url]];
+    // No browser opener (a server, SSH): the address printed alongside is enough, so ignore the failure.
     spawn(cmd, args as string[], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+}
+
+// Opens the dashboard from a server left running in its own process while the page is open. A mirror
+// is handed over to it, which removes it when it stops.
+async function showDashboard() {
+    pushMirror(false);
+    const own = !!mirror && settings.syncDir === mirror.dir;
+    if (own) mirror = undefined; // handed over: the server removes it when it stops
+    const url = await serveDetached(currentRunner().script, settings.syncDir, own);
+    out(fill(L().serving, { url }));
+    openInBrowser(url);
 }
 
 // Print a table report as a table, CSV or JSON
@@ -288,12 +321,12 @@ async function runSetup() {
     if (!(await setup(wizard, runner, flags, interactive, pkg.version))) return;
     out('\n' + L().setup.firstSync);
     const d = await data(true);
-    const file = dashboard(d);
+    pushMirror(true);
     out('\n' + (d.rows.length ? summary(d.rows) : L().noData));
-    out('\n' + fill(L().dashboard, { file }));
+    out('\n' + fill(L().dashboard, { file: dashboardWhere() }));
     if (!interactive) return;
     try {
-        if (await confirm(wizard, paint('bold', L().setup.openDashboard))) openFile(file);
+        if (await confirm(wizard, paint('bold', L().setup.openDashboard))) await showDashboard();
     } catch (e) {
         if (!(e instanceof Cancelled)) throw e;
     }
@@ -301,8 +334,9 @@ async function runSetup() {
 
 async function status() {
     const St = L().status;
+    ensureData(true); // a status is wanted most when the server is down
     const snaps = loadAll(settings.syncDir);
-    const prices = await loadPrices(pricesCache(), { offline: true });
+    const prices = await loadPrices(pricingFile(settings.syncDir), { offline: true });
     // each account with the plan given to it here, else the one in its login
     const accounts = namedAccounts(settings.claudeDirs, settings.machine, config.accounts, accountsOf(snaps)).map((a) => ({
         name: a.name,
@@ -311,7 +345,7 @@ async function status() {
     const info = {
         version: pkg.version,
         config: configFile(),
-        syncDir: settings.syncDir,
+        syncDir: settings.remote ? '' : settings.syncDir,
         remote: config.remote || '',
         machine: settings.machine,
         machines: snaps.map((s) => ({ name: s.machine, updated: s.updated, days: new Set(s.rows.map((r) => r.d)).size })),
@@ -328,7 +362,7 @@ async function status() {
     const pairs: [string, string][] = [
         [St.version, info.version],
         [St.config, info.config + (fs.existsSync(info.config) ? '' : ' (–)')],
-        [St.syncDir, info.syncDir],
+        [St.syncDir, info.syncDir || '–'],
         [St.remote, info.remote || St.none],
         [St.machine, info.machine],
         [St.machines, info.machines.map((m) => fill(St.machineLine, { name: m.name, updated: when(m.updated), days: m.days })).join('\n') || St.none],
@@ -344,7 +378,8 @@ async function status() {
 }
 
 async function pricing() {
-    const { table: t, note } = await loadPrices(pricesCache(), { offline: opt.offline, refresh: opt.refresh });
+    ensureData();
+    const { table: t, note } = await loadPrices(pricingFile(settings.syncDir), { offline: opt.offline, refresh: opt.refresh });
     if (opt.json) return out(JSON.stringify(t, null, 2));
     const c = L().col;
     const models = Object.entries(t.models).map(([m, p]) => [m, p.join(' / ')]);
@@ -383,6 +418,10 @@ function configSet(key: string | undefined, value: string) {
             next[key] = value;
             break;
         }
+        case 'machine':
+            if (!validMachine(value)) fail(fill(C.machine, { value }));
+            next[key] = value;
+            break;
         case 'anonymizeProjects':
             next[key] = value === 'true';
             break;
@@ -400,6 +439,12 @@ function configSet(key: string | undefined, value: string) {
 }
 
 async function main() {
+    // the server process behind `report`, started by serveDetached()
+    if (process.env.CC_COST_SERVE) {
+        await serveWhileOpen(process.env.CC_COST_SERVE, Number(process.env.CC_COST_SERVE_PORT));
+        if (process.env.CC_COST_SERVE_REMOVE) fs.rmSync(process.env.CC_COST_SERVE, { recursive: true, force: true });
+        return;
+    }
     if (opt.help) return out(fill(L().help, { version: pkg.version, url: REPO }));
     if (opt.version) return out(pkg.version);
     const [cmd = '', ...rest] = positionals;
@@ -408,20 +453,19 @@ async function main() {
 
     if (cmd === '' || cmd === 'sync') {
         const d = await data(cmd === '');
-        const file = dashboard(d);
+        pushMirror(cmd === '');
         if (cmd === 'sync') return;
         const rows = applyFilter(d.rows, filter());
         if (opt.json) return out(JSON.stringify(summaryJson(rows), null, 2));
         out('\n' + (rows.length ? summary(rows) : L().noData));
-        out('\n' + fill(L().dashboard, { file }));
+        out('\n' + fill(L().dashboard, { file: dashboardWhere() }));
         return footer(d);
     }
     if (tableCommands.includes(cmd) || cmd === 'insights') return report();
     if (cmd === 'report') {
-        const file = dashboard(await data(false));
-        out(fill(L().dashboard, { file }));
-        if (!opt.location) openFile(file);
-        return;
+        await data(false);
+        if (opt.location) return out(fill(L().dashboard, { file: dashboardWhere() }));
+        return showDashboard();
     }
     if (cmd === 'pricing') return pricing();
     if (cmd === 'setup') return runSetup();
@@ -429,7 +473,10 @@ async function main() {
     if (cmd === 'update') return update();
     if (cmd === 'config') {
         if (rest[0] === 'set') return configSet(rest[1], rest[2] ?? '');
-        if (interactive && !opt.json) return settingsMenu(wizard);
+        if (interactive && !opt.json) {
+            ensureData(true); // the names given to accounts on other machines; the menu works without them
+            return settingsMenu(wizard);
+        }
         out(fill(L().configFile, { file: configFile() }));
         return out(JSON.stringify({ ...settings, languages: Object.keys(LANGS) }, null, 2));
     }
@@ -437,3 +484,4 @@ async function main() {
 }
 
 await main();
+pushMirror(false);

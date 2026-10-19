@@ -3,8 +3,8 @@
 ## Commands
 
 ```bash
-cc-cost                          # sync this machine, print a summary, update the dashboard
-cc-cost sync                     # sync and update the dashboard, print nothing else
+cc-cost                          # sync this machine, print a summary
+cc-cost sync                     # sync, print nothing else
 
 cc-cost daily                    # cost per day
 cc-cost weekly                   # cost per week, weeks start on Monday
@@ -25,8 +25,9 @@ cc-cost plan                     # per month: API equivalent, per-30-day rate, Ã
                                  # account against its own plan, and all of them against the paid plans together
 cc-cost blocks                   # 5-hour windows, the active one with time left; one timeline per account
 
-cc-cost report                   # write the dashboard and open it in the browser
-cc-cost report --location        # write it and print its path, without opening it
+cc-cost report                   # serve the data folder on localhost and open the dashboard; the server stops
+                                 # by itself once the page is closed
+cc-cost report --location        # print where the dashboard is, without serving it
 cc-cost pricing                  # prices in use and their source
 cc-cost pricing --refresh        # fetch the pricing page now
 
@@ -78,9 +79,9 @@ there with a note on stderr.
 | `--tz <zone>` | IANA time zone for day boundaries, e.g. `Europe/Istanbul` |
 | `--no-color` | Plain text; also off when output isn't a terminal or `NO_COLOR` is set |
 | `--no-sync` | Report from the stored snapshots without scanning transcripts |
-| `--offline` | Don't fetch prices or check for a new version; use the cached or bundled price table |
+| `--offline` | Don't fetch prices or check for a new version; use the stored or bundled price table |
 | `--quiet` | Print nothing on success; for schedulers and hooks |
-| `--sync-dir <path>` | Shared folder for this run |
+| `--sync-dir <path>` | Data folder for this run, instead of the configured folder or the server |
 | `-h`, `--help` / `-v`, `--version` | |
 
 ## Examples

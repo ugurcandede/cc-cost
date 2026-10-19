@@ -1,5 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
+// Prices and how a call is priced. No node: imports: this file is embedded into the dashboard as well
+// (see dashboard.ts); reading and fetching the price table is in prices.ts.
 
 // $ per million tokens: [input, cache write 5m, cache write 1h, cache read, output]
 export type Price = readonly [number, number, number, number, number];
@@ -10,10 +10,10 @@ export interface PriceTable {
     models: Record<string, Price>;
     fast: Record<string, Price>; // fast mode rates; cache multipliers already applied
     webSearch: number; // $ per search
+    overrides?: Record<string, number[]>; // the user's own prices, by model or <model>-fast; kept in pricing.json
 }
 
 export const PRICING_URL = 'https://platform.claude.com/docs/en/about-claude/pricing.md';
-const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 // Fallback when the live page can't be fetched or parsed. Checked against PRICING_URL on 2026-09-18.
 export const BUNDLED: PriceTable = {
@@ -105,48 +105,18 @@ export function parsePricingPage(md: string, date: string): PriceTable | undefin
 }
 
 // Live prices over bundled ones: the page drops retired models, old usage still needs them.
-const withFallback = (t: PriceTable): PriceTable => ({
+export const withFallback = (t: PriceTable): PriceTable => ({
     ...t,
     models: { ...BUNDLED.models, ...t.models },
     fast: { ...BUNDLED.fast, ...t.fast },
 });
 
-export interface LoadResult {
-    table: PriceTable;
-    note?: string; // why live prices weren't used
-}
+// pricing.json as read: the table it holds, or, written by hand, only overrides over the bundled table
+export const storedTable = (stored?: Partial<PriceTable> | null): PriceTable =>
+    withFallback(stored?.models ? (stored as PriceTable) : { ...BUNDLED, ...(stored?.overrides && { overrides: stored.overrides }) });
 
-export async function loadPrices(cacheFile: string, opts: { offline?: boolean; refresh?: boolean } = {}): Promise<LoadResult> {
-    let cached: PriceTable | undefined;
-    try {
-        cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-    } catch {
-        // no cache yet
-    }
-    const fresh = cached && Date.now() - Date.parse(cached.date) < MAX_AGE_MS;
-    if (cached && (opts.offline || (fresh && !opts.refresh))) return { table: withFallback(cached) };
-
-    let note: string;
-    if (opts.offline) note = 'offline';
-    else {
-        try {
-            const res = await fetch(PRICING_URL, { signal: AbortSignal.timeout(5000) });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const table = parsePricingPage(await res.text(), new Date().toISOString());
-            if (!table) throw new Error('pricing page format not recognized');
-            fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
-            fs.writeFileSync(cacheFile, JSON.stringify(table));
-            return { table: withFallback(table) };
-        } catch (e) {
-            note = (e as Error).message;
-        }
-    }
-    return { table: cached ? withFallback(cached) : BUNDLED, note };
-}
-
-export function priceFor(table: PriceTable, model: string, fast: boolean, overrides: Record<string, number[]> = {}): Price | undefined {
-    const key = fast ? `${model}-fast` : model;
-    const own = overrides[key];
+export function priceFor(table: PriceTable, model: string, fast: boolean): Price | undefined {
+    const own = table.overrides?.[fast ? `${model}-fast` : model];
     if (own?.length === 5) return own as unknown as Price;
     return fast ? table.fast[model] : table.models[model];
 }

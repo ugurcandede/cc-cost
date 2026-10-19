@@ -5,7 +5,7 @@ import { accountsOf } from './aggregate.ts';
 import { configFile, isBetaPlan, PLAN_NAMES, PLANS, type Config } from './config.ts';
 import { beta, paint } from './format.ts';
 import { fill, L, LANGS, setLang } from './i18n.ts';
-import { claudeDirs, defaultMachine, defaultSyncDir, findClaudeDirs, tilde } from './paths.ts';
+import { claudeDirs, defaultMachine, findClaudeDirs, tilde, validMachine } from './paths.ts';
 import { Cancelled, checklist, input, select, track, type Choice } from './prompt.ts';
 import { probe, remoteProblem, sshHint } from './remote.ts';
 import {
@@ -23,6 +23,7 @@ export interface Wizard {
     settings: Settings;
     out: (text: string) => void;
     save: (next: Config) => void; // writes config.json; config and settings then reflect it
+    dataDir: (next: Config) => string; // the data folder a config reads, pulled from its server when it has one
 }
 
 const S = () => L().setup;
@@ -295,8 +296,10 @@ export async function setup(w: Wizard, runner: Runner, flags: SetupFlags, intera
         else next.lang ??= 'en';
         setLang(next.lang);
 
-        if (flags.syncDir) next.syncDir = path.resolve(flags.syncDir);
-        else if (interactive) await askWhere(w, heading(S().stepWhere), next, folders);
+        if (flags.syncDir) {
+            next.syncDir = path.resolve(flags.syncDir);
+            delete next.remote; // the flag names the place, as the question would
+        } else if (interactive) await askWhere(w, heading(S().stepWhere), next, folders);
         // without questions: keep the current place, else the first synced folder found
         else if (!next.syncDir && !next.remote && folders[0]) next.syncDir = dataFolderIn(folders[0].path);
 
@@ -307,7 +310,7 @@ export async function setup(w: Wizard, runner: Runner, flags: SetupFlags, intera
 
         if (interactive) {
             const machine = next.machine ?? defaultMachine();
-            const syncDir = path.resolve(next.syncDir ?? defaultSyncDir());
+            const syncDir = w.dataDir(next);
             const accounts = accountsIn(w, claudeDirs(next.claudeDirs), machine, syncDir);
             const days = accounts.length ? unassignedDays(w, syncDir, machine) : 0;
             total += accounts.length - Math.max(1, foundClaude.length) + (days ? 1 : 0);
@@ -399,7 +402,8 @@ export async function settingsMenu(w: Wizard) {
             } else if (item.value === 'accounts') {
                 if (!(await editAccounts(w, head, next))) continue;
             } else if (item.value === 'machine')
-                next.machine = await askText(w, head, [M.machineNote], fill(M.askMachine, { current: settings.machine }), settings.machine, () => undefined);
+                next.machine = await askText(w, head, [M.machineNote], fill(M.askMachine, { current: settings.machine }), settings.machine,
+                    (name) => (validMachine(name) ? undefined : fill(L().configCheck.machine, { value: name })));
             else if (item.value === 'timezone')
                 next.timezone = await askText(w, head, [], fill(M.askTimezone, { current: settings.timezone }), settings.timezone,
                     (tz) => (validTimezone(tz) ? undefined : fill(M.badTimezone, { tz })));

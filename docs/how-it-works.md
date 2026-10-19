@@ -7,9 +7,12 @@
 2. Reads the assistant messages that carry a `usage` block, and the rate-limit events. Message content
    is never parsed beyond that.
 3. Removes duplicates (below) and sums the tokens per day, project, session, model and attribution.
-4. Merges the result into this machine's snapshot in the shared folder (see [the archive](#the-archive)).
-   With `remote` set, uploads that snapshot to the server over SSH and downloads the other machines'.
-5. Reads every machine's snapshot, prices it, prints the report and rewrites `dashboard.html`.
+4. Merges the result into this machine's snapshot in the data folder (see [the archive](#the-archive)),
+   one file per month, so only the months that changed are written. With `remote` set, the data folder is
+   the one on the server: pulled over SSH before the run, the changed files pushed after it.
+5. Reads every machine's snapshot, prices it and prints the report. `dashboard.html` in the same folder
+   is a static page that reads those files itself when opened; a machine writes it only when its cc-cost
+   is newer than the one the page came from.
 
 ## Costs
 
@@ -35,10 +38,11 @@ isn't charged per token.
 ### Prices
 
 Prices are read from `https://platform.claude.com/docs/en/about-claude/pricing.md`, the official page in
-Markdown, at most once every 24 hours, and cached in the config folder. The model table and the
-fast-mode table are parsed; a page that yields fewer than five models is treated as unrecognized rather
-than half-used. If the page can't be fetched or parsed, the last cached copy is used, then the table
-shipped with the package, and the output says which.
+Markdown, at most once every 24 hours, into `pricing.json` in the data folder, so every machine and the
+dashboard price with the same table. The model table and the fast-mode table are parsed; a page that
+yields fewer than five models is treated as unrecognized rather than half-used. If the page can't be
+fetched or parsed, the stored table is used, then the one shipped with the package, and the output says
+which.
 
 Models retired from the page keep the prices shipped with the package, so old usage stays priced.
 Today's prices apply to all history.
@@ -77,6 +81,11 @@ blocks are per account.
 
 Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default; cc-cost reads the setting).
 cc-cost's snapshots keep the numbers after that, so history grows past the cleanup window.
+
+A machine's snapshot is a header, `machines/<machine>.json` (time zone, accounts, the list of months),
+and one file per month, `machines/<machine>/<YYYY-MM>.json`, with that month's days, sessions and
+rate-limit events. A month older than the cleanup window never changes again, so its file is written
+once and a sync writes one or two files.
 
 A new scan replaces a stored day only when that day is inside the cleanup window, where all of its
 transcripts must still exist. An older day may be only partly on disk: its short sessions deleted, a

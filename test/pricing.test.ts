@@ -4,8 +4,9 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { tempDir } from './tmp.ts';
 import { priceRows } from '../src/aggregate.ts';
-import { BUNDLED, loadPrices, modelId, parsePricingPage, priceFor } from '../src/pricing.ts';
-import { emptySnapshot } from '../src/snapshot.ts';
+import { emptySnapshot } from '../src/months.ts';
+import { loadPrices, seedOverrides } from '../src/prices.ts';
+import { BUNDLED, modelId, parsePricingPage, priceFor, storedTable } from '../src/pricing.ts';
 
 // Trimmed copy of the structure of https://platform.claude.com/docs/en/about-claude/pricing.md
 const PAGE = `
@@ -64,7 +65,7 @@ test('the parsed live page agrees with the bundled table', () => {
 });
 
 test('overrides win; fast rows use fast prices', () => {
-    assert.deepEqual(priceFor(BUNDLED, 'claude-opus-5', false, { 'claude-opus-5': [1, 1, 1, 1, 1] }), [1, 1, 1, 1, 1]);
+    assert.deepEqual(priceFor({ ...BUNDLED, overrides: { 'claude-opus-5': [1, 1, 1, 1, 1] } }, 'claude-opus-5', false), [1, 1, 1, 1, 1]);
     assert.equal(priceFor(BUNDLED, 'claude-opus-5', true)![4], 50);
     assert.equal(priceFor(BUNDLED, 'claude-opus-4-7', true), undefined);
 });
@@ -91,13 +92,36 @@ test('loadPrices: offline without a cache falls back to the bundled table and sa
     assert.equal(r.note, 'offline');
 });
 
-test('loadPrices: a fresh cache is used as is, bundled models fill its gaps', async () => {
-    const cache = path.join(tempDir('cc-cost-price-'), 'cache.json');
-    const live = { date: new Date().toISOString(), source: 'live', models: { 'claude-opus-5': [9, 9, 9, 9, 9] }, fast: {}, webSearch: 0.02 };
-    fs.writeFileSync(cache, JSON.stringify(live));
-    const r = await loadPrices(cache);
+test('loadPrices: a fresh pricing.json is used as is, bundled models fill its gaps, overrides stay', async () => {
+    const file = path.join(tempDir('cc-cost-price-'), 'pricing.json');
+    const live = { date: new Date().toISOString(), source: 'live', models: { 'claude-opus-5': [9, 9, 9, 9, 9] }, fast: {}, webSearch: 0.02, overrides: { 'claude-opus-4': [1, 1, 1, 1, 1] } };
+    fs.writeFileSync(file, JSON.stringify(live));
+    const r = await loadPrices(file);
     assert.equal(r.note, undefined);
     assert.deepEqual(r.table.models['claude-opus-5'], [9, 9, 9, 9, 9]);
     assert.deepEqual(r.table.models['claude-opus-4'], BUNDLED.models['claude-opus-4']);
     assert.equal(r.table.webSearch, 0.02);
+    assert.deepEqual(priceFor(r.table, 'claude-opus-4', false), [1, 1, 1, 1, 1]);
+});
+
+test('a pricing.json written by hand with only overrides prices with the bundled table, in the terminal and the dashboard', async () => {
+    const file = path.join(tempDir('cc-cost-price-'), 'pricing.json');
+    fs.writeFileSync(file, JSON.stringify({ overrides: { 'claude-opus-5': [1, 1, 1, 1, 1] } }));
+    const r = await loadPrices(file, { offline: true });
+    assert.equal(r.table.source, 'bundled');
+    assert.equal(r.table.webSearch, BUNDLED.webSearch);
+    assert.deepEqual(priceFor(r.table, 'claude-opus-5', false), [1, 1, 1, 1, 1]);
+    // the dashboard reads the same file through storedTable
+    const snap = { ...emptySnapshot('pc', 'UTC'), rows: [{ d: '2026-09-10', p: 'a', s: 's', m: 'claude-opus-5', t: [1e6, 0, 0, 0, 0, 1, 0, 0, 0, 0] }] };
+    const { rows } = priceRows([snap], storedTable(JSON.parse(fs.readFileSync(file, 'utf8'))));
+    assert.equal(rows[0]!.cost, 1);
+});
+
+test('seedOverrides: the overrides of a 1.x config move into pricing.json once', () => {
+    const file = path.join(tempDir('cc-cost-price-'), 'pricing.json');
+    seedOverrides(file, { 'claude-opus-5': [1, 1, 1, 1, 1] });
+    seedOverrides(file, { 'claude-opus-5': [2, 2, 2, 2, 2] });
+    const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(stored.overrides, { 'claude-opus-5': [1, 1, 1, 1, 1] }, 'the file is theirs from then on');
+    assert.equal(stored.source, 'bundled');
 });

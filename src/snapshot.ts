@@ -1,55 +1,62 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { localClock, type ScanResult } from './scan.ts';
-import { T_LEN, UNKNOWN, type AccountMeta, type LimitEvent, type Snapshot } from './types.ts';
+import { localClock } from './aggregate.ts';
+import { fill, L } from './i18n.ts';
+import { emptySnapshot, fromLegacy, isLegacy, join, split } from './months.ts';
+import type { ScanResult } from './scan.ts';
+import type { AccountMeta, Header, LimitEvent, MonthFile, Snapshot } from './types.ts';
 
-// One file per machine: each machine only writes its own, so a sync service never sees two
-// writers on the same file and can't produce conflicted copies.
+// One header file and one folder of months per machine: each machine only writes its own, so a sync
+// service never sees two writers on the same file and can't produce conflicted copies. index.json
+// lists the machines for the dashboard, which can't list a folder; a machine adds itself once.
 export const machinesDir = (syncDir: string) => path.join(syncDir, 'machines');
-const fileFor = (syncDir: string, machine: string) => path.join(machinesDir(syncDir), `${machine}.json`);
-
-export const emptySnapshot = (machine: string, timezone: string): Snapshot => ({
-    schema: 2, machine, updated: '', timezone, rows: [], hourly: [], sessions: {}, limits: [],
-});
-
-// Schema 1, written by the original cc-cost.mjs into the root of the sync folder:
-// { host, updated, days: { date: { model or model-fast: [input, w5m, w1h, read, output, calls] } } }
-interface LegacySnapshot {
-    host?: string;
-    updated?: string;
-    days: Record<string, Record<string, number[]>>;
-}
-
-const isLegacy = (v: unknown): v is LegacySnapshot =>
-    typeof v === 'object' && v !== null && !('schema' in v) && typeof (v as LegacySnapshot).days === 'object';
-
-export function fromLegacy(v1: LegacySnapshot, machine: string): Snapshot {
-    const snap = emptySnapshot(v1.host ?? machine, UNKNOWN);
-    snap.updated = v1.updated ?? '';
-    for (const [d, models] of Object.entries(v1.days))
-        for (const [key, t] of Object.entries(models)) {
-            const fast = key.endsWith('-fast');
-            const counters = [...t.slice(0, 6), ...new Array(T_LEN - 6).fill(0)];
-            snap.rows.push({ d, p: UNKNOWN, s: UNKNOWN, m: fast ? key.slice(0, -5) : key, ...(fast && { f: 1 as const }), t: counters });
-        }
-    return snap;
-}
+export const indexFile = (syncDir: string) => path.join(machinesDir(syncDir), 'index.json');
+const headerFile = (syncDir: string, machine: string) => path.join(machinesDir(syncDir), `${machine}.json`);
+const monthFile = (syncDir: string, machine: string, month: string) => path.join(machinesDir(syncDir), machine, `${month}.json`);
 
 function readJson(file: string): unknown {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-// All machines in the sync folder. Legacy files count only for machines not yet on schema 2.
+// A header with its months; a schema 2 file is whole by itself. A month file missing from the folder
+// (a sync service still copying it) is skipped rather than failing the whole machine.
+function readMachine(syncDir: string, file: string): Snapshot | undefined {
+    const v = readJson(file) as Header | Snapshot;
+    if (v.schema !== 2 && v.schema !== 3) return undefined;
+    const months: MonthFile[] = [];
+    if ('months' in v)
+        for (const m of v.months) {
+            const f = monthFile(syncDir, v.machine, m);
+            if (fs.existsSync(f)) months.push(readJson(f) as MonthFile);
+        }
+    return join(v, months);
+}
+
+const headerFiles = (syncDir: string) => fs.readdirSync(machinesDir(syncDir)).filter((f) => f.endsWith('.json') && f !== 'index.json');
+
+// All machines in the sync folder. Legacy files count only for machines not yet on schema 2 or 3. A
+// machine whose files can't be read (a sync service still copying one) is left out, with a note.
 export function loadAll(syncDir: string): Snapshot[] {
     const byMachine = new Map<string, Snapshot>();
+    const unreadable = (file: string, e: unknown) => console.error(fill(L().unreadable, { file, reason: (e as Error).message }));
     if (fs.existsSync(machinesDir(syncDir)))
-        for (const f of fs.readdirSync(machinesDir(syncDir)).filter((f) => f.endsWith('.json'))) {
-            const snap = readJson(path.join(machinesDir(syncDir), f)) as Snapshot;
-            if (snap.schema === 2) byMachine.set(snap.machine, snap);
+        for (const f of headerFiles(syncDir)) {
+            try {
+                const snap = readMachine(syncDir, path.join(machinesDir(syncDir), f));
+                if (snap) byMachine.set(snap.machine, snap);
+            } catch (e) {
+                unreadable(path.join('machines', f), e);
+            }
         }
     if (fs.existsSync(syncDir))
         for (const f of fs.readdirSync(syncDir).filter((f) => f.endsWith('.json'))) {
-            const v = readJson(path.join(syncDir, f));
+            let v: unknown;
+            try {
+                v = readJson(path.join(syncDir, f));
+            } catch (e) {
+                unreadable(f, e);
+                continue;
+            }
             if (!isLegacy(v)) continue;
             const snap = fromLegacy(v, f.replace(/\.json$/, ''));
             if (!byMachine.has(snap.machine)) byMachine.set(snap.machine, snap);
@@ -58,8 +65,8 @@ export function loadAll(syncDir: string): Snapshot[] {
 }
 
 export function loadOwn(syncDir: string, machine: string, timezone: string): Snapshot {
-    const file = fileFor(syncDir, machine);
-    if (fs.existsSync(file)) return readJson(file) as Snapshot;
+    const file = headerFile(syncDir, machine);
+    if (fs.existsSync(file)) return readMachine(syncDir, file) ?? emptySnapshot(machine, timezone);
     const legacy = path.join(syncDir, `${machine}.json`);
     if (fs.existsSync(legacy)) {
         const v = readJson(legacy);
@@ -77,7 +84,7 @@ export function merge(
     prev: Snapshot,
     scan: ScanResult,
     safeFrom: string,
-    meta: { machine: string; timezone: string; accounts?: Record<string, AccountMeta>; unassigned?: string },
+    meta: { machine: string; timezone: string; accounts?: Record<string, AccountMeta>; unassigned?: string; plan?: string },
 ): Snapshot {
     const stored = new Set(prev.rows.map((r) => r.d));
     const take = new Set([...scan.rows, ...scan.hourly].map((r) => r.d).filter((d) => d >= safeFrom || !stored.has(d)));
@@ -97,7 +104,7 @@ export function merge(
     }
 
     return {
-        schema: 2,
+        schema: 3,
         machine: meta.machine,
         updated: new Date().toISOString(),
         timezone: meta.timezone,
@@ -107,14 +114,46 @@ export function merge(
         limits: [...limits.values()].sort((a, b) => a.ts.localeCompare(b.ts)),
         ...(meta.accounts || prev.accounts ? { accounts: { ...prev.accounts, ...meta.accounts } } : {}),
         ...(meta.unassigned ? { unassigned: meta.unassigned } : {}),
+        ...(meta.plan ? { plan: meta.plan } : {}),
     };
 }
 
-export function save(syncDir: string, snap: Snapshot): string {
-    const file = fileFor(syncDir, snap.machine);
+// write-then-rename, so a sync client never uploads a half-written file; untouched when the content is
+// the same, so a sync client has nothing to upload either
+function writeIfChanged(file: string, text: string) {
+    try {
+        if (fs.readFileSync(file, 'utf8') === text) return;
+    } catch {
+        // new file
+    }
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    // write-then-rename so the sync client never uploads a half-written file
-    fs.writeFileSync(file + '.tmp', JSON.stringify(snap));
+    fs.writeFileSync(file + '.tmp', text);
     fs.renameSync(file + '.tmp', file);
+}
+
+// Months first, the header last: a reader never finds a month in the list that is not on disk yet.
+// Returns the header file.
+export function save(syncDir: string, snap: Snapshot): string {
+    const { header, months } = split(snap);
+    for (const [m, data] of Object.entries(months)) writeIfChanged(monthFile(syncDir, snap.machine, m), JSON.stringify(data));
+    const file = headerFile(syncDir, snap.machine);
+    writeIfChanged(file, JSON.stringify(header));
+    writeIfChanged(indexFile(syncDir), JSON.stringify(machineNames(syncDir)));
     return file;
+}
+
+// What index.json lists: the file to read for each machine found here, so a machine whose files were
+// deleted leaves the index too. A header in machines/, or in the root the legacy file of a machine still
+// on the original cc-cost.mjs, which the dashboard can't find otherwise; its host may differ from the file.
+function machineNames(syncDir: string): string[] {
+    const headers = headerFiles(syncDir).map((f) => f.slice(0, -5));
+    const legacy = fs.readdirSync(syncDir).filter((f) => f.endsWith('.json')).filter((f) => {
+        try {
+            const v = readJson(path.join(syncDir, f));
+            return isLegacy(v) && !headers.includes(v.host ?? f.slice(0, -5));
+        } catch {
+            return false; // not whole yet: listed by a later save
+        }
+    });
+    return [...headers, ...legacy.map((f) => f.slice(0, -5))].sort();
 }
