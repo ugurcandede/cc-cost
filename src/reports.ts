@@ -1,12 +1,11 @@
 import {
-    agentOf, avgContext, byCost, cacheHitRatio, contextTokens, daysBetween, groupBy, modelLabel, repriceAs, totals, weekOf,
+    agentOf, avgContext, byCost, cacheHitRatio, contextTokens, daysBetween, groupBy, localClock, modelLabel, repriceAs, totals, weekOf,
     type Account, type MachineLimit, type PricedHour, type PricedRow, type Totals,
 } from './aggregate.ts';
 import { isBetaPlan, PLAN_NAMES, planPrice, PLANS } from './config.ts';
 import { beta, BETA, int, markBeta, paint, table, tokens, usd } from './format.ts';
 import { fill, L, lang } from './i18n.ts';
 import type { PriceTable } from './pricing.ts';
-import { localClock } from './scan.ts';
 import { T, UNKNOWN } from './types.ts';
 
 // A report is raw values plus how to show them; the terminal formats them, CSV keeps them raw.

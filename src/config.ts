@@ -3,6 +3,8 @@ import path from 'node:path';
 import { configDir } from './paths.ts';
 import type { AccountMeta } from './types.ts';
 
+export { isBetaPlan, PLAN_NAMES, planPrice, PLANS } from './plans.ts';
+
 export interface Config {
     syncDir?: string; // folder shared between machines (Dropbox, iCloud, OneDrive, ...)
     machine?: string; // display name for this machine; defaults to the hostname
@@ -10,27 +12,12 @@ export interface Config {
     timezone?: string; // IANA zone used to split days; defaults to the system zone
     plan?: string; // key of PLANS, for usage synced before accounts were told apart; accounts carry their own
     anonymizeProjects?: boolean;
-    pricing?: Record<string, number[]>; // per-model overrides, same layout as PRICES
-    remote?: string; // user@host:path of a server reached over ssh
+    pricing?: Record<string, number[]>; // cc-cost 1.x price overrides; copied into pricing.json in the data folder on the next sync
+    remote?: string; // user@host:path of a server reached over ssh; the data lives there, not on this machine
     claudeDirs?: string[]; // Claude Code data folders, one per account; replaces the defaults and CLAUDE_CONFIG_DIR
     accounts?: Record<string, Omit<AccountMeta, 'folder'>>; // name, plan and price per account id
     unassigned?: string; // account id for rows synced before accounts were told apart
 }
-
-// Monthly subscription price in USD. Team prices are per seat, billed monthly; an annual or negotiated
-// price goes into the account's own price.
-export const PLANS: Record<string, number> = { pro: 20, max5x: 100, max20x: 200, teamStandard: 25, teamPremium: 125 };
-
-export const PLAN_NAMES: Record<string, string> = {
-    pro: 'Pro', max5x: 'Max 5x', max20x: 'Max 20x', teamStandard: 'Team Standard', teamPremium: 'Team Premium',
-};
-
-// Team prices come from third-party sources, and a Team seat's type is guessed from its limits: shown as beta
-export const isBetaPlan = (plan?: string) => !!plan?.startsWith('team');
-
-// $ a month for an account: its own price, its plan's, 0 for a sponsored seat, or unknown
-export const planPrice = (plan?: string, price?: number): number | undefined =>
-    price ?? (plan === 'free' ? 0 : plan ? PLANS[plan] : undefined);
 
 export const CONFIG_KEYS = ['syncDir', 'machine', 'lang', 'timezone', 'plan', 'anonymizeProjects', 'claudeDirs', 'remote'] as const;
 

@@ -1,6 +1,21 @@
-import { PLAN_NAMES } from './config.ts';
+import { PLAN_NAMES } from './plans.ts';
 import { priceFor, type Price, type PriceTable } from './pricing.ts';
 import { T, T_LEN, UNKNOWN, type AccountMeta, type HourRow, type LimitEvent, type Row, type Snapshot } from './types.ts';
+
+// Pricing, filters and totals. No node: imports: this file is embedded into the dashboard as well
+// (see dashboard.ts), which prices the snapshots with the same code as the terminal reports.
+
+// Local date, hour and minute of an ISO timestamp in a zone
+export function localClock(timezone: string) {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    });
+    return (iso: string) => {
+        const p: Record<string, string> = {};
+        for (const part of fmt.formatToParts(new Date(iso))) p[part.type] = part.value;
+        return { d: `${p.year}-${p.month}-${p.day}`, h: Number(p.hour), min: Number(p.minute) };
+    };
+}
 
 // $ per part: input, cache write, cache read, output, web search
 export type Cost = [number, number, number, number, number];
@@ -69,7 +84,7 @@ export function costOf(t: number[], p: Price, webSearch: number): Cost {
 
 const sum = (c: Cost) => c[0] + c[1] + c[2] + c[3] + c[4];
 
-export function priceRows(snaps: Snapshot[], table: PriceTable, overrides: Record<string, number[]> = {}) {
+export function priceRows(snaps: Snapshot[], table: PriceTable) {
     const rows: PricedRow[] = [];
     const hours: PricedHour[] = [];
     const limits: MachineLimit[] = [];
@@ -82,7 +97,7 @@ export function priceRows(snaps: Snapshot[], table: PriceTable, overrides: Recor
             return { machine: snap.machine, account, accountName: accounts.get(account)?.label ?? accountLabel(account) };
         };
         for (const r of snap.rows) {
-            const p = priceFor(table, r.m, !!r.f, overrides);
+            const p = priceFor(table, r.m, !!r.f);
             if (!p) {
                 unknown.add(modelLabel(r));
                 continue;
@@ -91,7 +106,7 @@ export function priceRows(snaps: Snapshot[], table: PriceTable, overrides: Recor
             rows.push({ ...r, ...owner(r.ac), c, cost: sum(c) });
         }
         for (const h of snap.hourly) {
-            const p = priceFor(table, h.m, !!h.f, overrides);
+            const p = priceFor(table, h.m, !!h.f);
             if (p) hours.push({ ...h, ...owner(h.ac), cost: sum(costOf(h.t, p, table.webSearch)) });
         }
         for (const l of snap.limits) limits.push({ ...l, ...owner(l.ac) });
