@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fill, L } from './i18n.ts';
 
@@ -43,17 +44,20 @@ export const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 // Never prompt: the schedule and the hook have no one to answer a password or host-key question.
 // A new server's host key is recorded on first contact; a key that changes later is still refused.
-// LogLevel=ERROR keeps the "Permanently added" notice out of the errors shown to the user.
-const SSH_OPTS = ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=10', '-o', 'LogLevel=ERROR'];
+const SSH_OPTS = ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=10'];
 
 // ssh takes the port as -p and an IPv6 host without brackets; scp takes -P and keeps the brackets
 const sshArgs = (r: Remote) => [...SSH_OPTS, ...(r.port ? ['-p', String(r.port)] : []), r.host.replace(/[[\]]/g, '')];
 const scpArgs = (r: Remote) => [...SSH_OPTS, ...(r.port ? ['-P', String(r.port)] : [])];
 
+// What ssh said, less the notice about the host key it just recorded. Not LogLevel=ERROR: that would also
+// hide why a connection ended, which ssh says at its default level ("Connection closed by ...").
+const said = (stderr: string) => stderr.split('\n').filter((l) => !/^Warning: Permanently added/.test(l)).join('\n').trim();
+
 function run(cmd: string, args: string[], input?: Buffer) {
     const r = spawnSync(cmd, args, { input, encoding: 'utf8', timeout: 60_000 });
     if (r.error) throw r.error;
-    if (r.status !== 0) throw new Error(r.stderr.trim() || `${cmd} exited with ${r.status}`);
+    if (r.status !== 0) throw new Error(said(r.stderr) || `${cmd} exited with ${r.status}`);
 }
 
 function parsed(remote: string): Remote {
@@ -62,21 +66,67 @@ function parsed(remote: string): Remote {
     return r;
 }
 
-// Uploads this machine's snapshot, then downloads the other machines' into the local machines folder.
-export function exchange(remote: string, own: string) {
-    const r = parsed(remote);
-    const dir = `${r.dir}/machines`;
-    const name = path.basename(own);
-    const target = `${dir}/${name}`;
-    // write-then-rename on the server too, so a machine downloading at that moment never gets half a file
-    run('ssh', [...sshArgs(r), `mkdir -p ${shQuote(dir)} && cat > ${shQuote(target + '.tmp')} && mv ${shQuote(target + '.tmp')} ${shQuote(target)}`], fs.readFileSync(own));
+// The data lives on the server. A command works on a mirror of the server's folder in a temporary
+// folder: pulled before the first read, the changed files pushed at the end, and removed on exit.
+export interface Mirror {
+    dir: string;
+    push(): string[]; // uploads what changed since the pull or the last push; returns those files
+    close(): void;
+}
 
-    const local = path.dirname(own);
-    const tmp = fs.mkdtempSync(path.join(local, '.remote-'));
+export function openMirror(remote: string): Mirror {
+    const r = parsed(remote);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-cost-'));
     try {
-        run('scp', [...scpArgs(r), '-q', `${r.host}:${dir}/*.json`, tmp]);
-        // this machine's own file stays the local one
-        for (const f of fs.readdirSync(tmp)) if (f !== name) fs.renameSync(path.join(tmp, f), path.join(local, f));
+        // the folder and machines/ exist from the first use on, so the glob below always has something to copy
+        run('ssh', [...sshArgs(r), `mkdir -p ${shQuote(r.dir + '/machines')}`]);
+        run('scp', [...scpArgs(r), '-rq', `${r.host}:${r.dir}/*`, dir]);
+    } catch (e) {
+        fs.rmSync(dir, { recursive: true, force: true }); // nothing to keep from a pull that failed
+        throw e;
+    }
+    let before = contents(dir);
+    return {
+        dir,
+        push() {
+            const now = contents(dir);
+            const changed = [...now].filter(([f, data]) => !before.get(f)?.equals(data)).map(([f]) => f);
+            upload(r, dir, changed);
+            before = now;
+            return changed;
+        },
+        close() {
+            fs.rmSync(dir, { recursive: true, force: true });
+        },
+    };
+}
+
+// Every file under a folder, by its path relative to it with forward slashes
+function contents(root: string, rel = ''): Map<string, Buffer> {
+    const out = new Map<string, Buffer>();
+    for (const e of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
+        const p = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) for (const [k, v] of contents(root, p)) out.set(k, v);
+        else out.set(p, fs.readFileSync(path.join(root, rel, e.name)));
+    }
+    return out;
+}
+
+// One scp for all the files into a staging folder on the server, then one ssh to move each into place:
+// a move is atomic there, so a machine or browser reading at that moment never gets half a file.
+function upload(r: Remote, local: string, files: string[]) {
+    if (!files.length) return;
+    const stage = `${r.dir}/.incoming-${Date.now().toString(36)}`;
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-cost-push-'));
+    try {
+        for (const f of files) {
+            fs.mkdirSync(path.dirname(path.join(tmp, f)), { recursive: true });
+            fs.copyFileSync(path.join(local, f), path.join(tmp, f));
+        }
+        run('scp', [...scpArgs(r), '-rq', tmp, `${r.host}:${stage}`]);
+        const dirOf = (p: string) => p.replace(/\/[^/]*$/, '');
+        const moves = files.map((f) => `mkdir -p ${shQuote(dirOf(`${r.dir}/${f}`))} && mv -f ${shQuote(`${stage}/${f}`)} ${shQuote(`${r.dir}/${f}`)}`);
+        run('ssh', [...sshArgs(r), [...moves, `rm -rf ${shQuote(stage)}`].join(' && ')]);
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -92,7 +142,8 @@ export type SshFailure = 'auth' | 'refused' | 'resolve' | 'hostkey' | 'timeout';
 export function sshFailure(message: string): SshFailure | undefined {
     if (/REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed/i.test(message)) return 'hostkey';
     if (/Permission denied/i.test(message)) return 'auth';
-    if (/Connection refused/i.test(message)) return 'refused';
+    // "closed by": the port answers but nothing speaks SSH there, e.g. a proxy in front of a stopped server
+    if (/Connection refused|Connection closed by|kex_exchange_identification/i.test(message)) return 'refused';
     if (/Could not resolve hostname|Name or service not known|nodename nor servname/i.test(message)) return 'resolve';
     if (/timed out|ETIMEDOUT/i.test(message)) return 'timeout';
     return undefined;

@@ -1,21 +1,21 @@
 import path from 'node:path';
 import { detectAccount } from './accounts.ts';
+import { localClock } from './aggregate.ts';
 import type { Config } from './config.ts';
 import { retentionDays } from './paths.ts';
-import { exchange } from './remote.ts';
-import { localClock, scan, type ScanResult } from './scan.ts';
+import { scan, type ScanResult } from './scan.ts';
 import { loadOwn, merge, save } from './snapshot.ts';
 import type { AccountMeta } from './types.ts';
 
 export interface Settings {
-    syncDir: string;
+    syncDir: string; // where the data is: the shared folder, or a mirror of the server's folder (see cli.ts)
     machine: string;
     lang: string;
     timezone: string;
     anonymize: boolean;
-    pricing: Record<string, number[]>;
+    plan?: string; // for rows that belong to no account
     claudeDirs: string[];
-    remote?: string; // user@host:path, exchanged over ssh after each sync
+    remote?: string; // user@host:path of the server syncDir mirrors
     accounts?: Config['accounts']; // name, plan and price the user gave each account
     unassigned?: string; // account id for rows synced before accounts were told apart
 }
@@ -26,7 +26,6 @@ export interface SyncResult {
     scan: ScanResult;
     file: string;
     kept: number; // stored days that the scan did not replace
-    remoteError?: string; // the server could not be reached; reports use the local copies
 }
 
 // Scan this machine's transcripts into its snapshot in the sync folder.
@@ -46,17 +45,9 @@ export async function sync(s: Settings): Promise<SyncResult> {
     const result = await scan(dirs, { timezone: s.timezone, anonymize: s.anonymize, accounts: accountOf });
     const prev = loadOwn(s.syncDir, s.machine, s.timezone);
     const safeFrom = localClock(s.timezone)(new Date(Date.now() - (retentionDays(dirs) - 1) * 864e5).toISOString()).d;
-    const next = merge(prev, result, safeFrom, { machine: s.machine, timezone: s.timezone, accounts, unassigned: s.unassigned });
+    const next = merge(prev, result, safeFrom, { machine: s.machine, timezone: s.timezone, accounts, unassigned: s.unassigned, plan: s.plan });
     const file = save(s.syncDir, next);
-    let remoteError: string | undefined;
-    if (s.remote) {
-        try {
-            exchange(s.remote, file);
-        } catch (e) {
-            remoteError = (e as Error).message;
-        }
-    }
     const fromPrev = new Set(prev.rows);
     const kept = new Set(next.rows.filter((r) => fromPrev.has(r)).map((r) => r.d)).size;
-    return { scan: result, file, kept, remoteError };
+    return { scan: result, file, kept };
 }
